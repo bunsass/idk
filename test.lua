@@ -3,23 +3,40 @@
 
 repeat task.wait() until game:IsLoaded()
 
+print("[Auto Abilities] Game loaded, initializing...")
+
 local Players = game:GetService("Players")
 local LocalPlayer = Players.LocalPlayer
 local RS = game:GetService("ReplicatedStorage")
 local RunService = game:GetService("RunService")
 local HttpService = game:GetService("HttpService")
 
+-- Wait for character
+repeat task.wait() until LocalPlayer.Character
+print("[Auto Abilities] Character loaded")
+
 -- Config
 getgenv().AutoAbilitiesEnabled = getgenv().AutoAbilitiesEnabled or false
 getgenv().UnitAbilities = getgenv().UnitAbilities or {}
 
 -- Load WindUI
-local WindUI = loadstring(game:HttpGet("https://github.com/Footagesus/WindUI/releases/latest/download/main.lua"))()
+print("[Auto Abilities] Loading WindUI...")
+local success, WindUI = pcall(function()
+    return loadstring(game:HttpGet("https://github.com/Footagesus/WindUI/releases/latest/download/main.lua"))()
+end)
+
+if not success then
+    warn("[Auto Abilities] Failed to load WindUI:", WindUI)
+    return
+end
+
+print("[Auto Abilities] WindUI loaded successfully")
+task.wait(0.5)
 
 -- Helper Functions
 local function getTowerInfo(unitName)
     local ok, data = pcall(function()
-        local towerInfoPath = RS:WaitForChild("Modules"):WaitForChild("TowerInfo")
+        local towerInfoPath = RS:WaitForChild("Modules", 5):WaitForChild("TowerInfo", 5)
         local towerModule = towerInfoPath:FindFirstChild(unitName)
         if towerModule and towerModule:IsA("ModuleScript") then
             return require(towerModule)
@@ -223,23 +240,36 @@ local function startAutoAbilities()
 end
 
 -- Create UI
-local Window = WindUI:CreateWindow({
-    Title = "Auto Abilities",
-    Author = "ALS",
-    Folder = "AutoAbilities",
-    Size = UDim2.fromOffset(600, 460),
-    NewElements = true,
-    HideSearchBar = false,
-    OpenButton = {
+print("[Auto Abilities] Creating window...")
+
+local Window
+local windowSuccess = pcall(function()
+    Window = WindUI:CreateWindow({
         Title = "Auto Abilities",
-        CornerRadius = UDim.new(1, 0),
-        StrokeThickness = 1,
-        Enabled = true,
-        Draggable = true,
-        OnlyMobile = false,
-        Color = ColorSequence.new(Color3.fromRGB(48, 255, 106), Color3.fromRGB(231, 255, 47)),
-    },
-})
+        Author = "ALS",
+        Folder = "AutoAbilities",
+        Size = UDim2.fromOffset(600, 460),
+        NewElements = true,
+        HideSearchBar = false,
+        OpenButton = {
+            Title = "Auto Abilities",
+            CornerRadius = UDim.new(1, 0),
+            StrokeThickness = 1,
+            Enabled = true,
+            Draggable = true,
+            OnlyMobile = false,
+            Color = ColorSequence.new(Color3.fromRGB(48, 255, 106), Color3.fromRGB(231, 255, 47)),
+        },
+    })
+end)
+
+if not windowSuccess or not Window then
+    warn("[Auto Abilities] Failed to create window")
+    return
+end
+
+print("[Auto Abilities] Window created successfully")
+task.wait(0.3)
 
 local MainSection = Window:Section({
     Title = "Main",
@@ -253,6 +283,8 @@ local UnitsSection = Window:Section({
 
 local MainTab = MainSection:Tab({ Title = "Settings", Icon = "settings" })
 local UnitsTab = UnitsSection:Tab({ Title = "Configure Units", Icon = "sliders" })
+
+print("[Auto Abilities] Tabs created")
 
 -- Main Tab Content
 MainTab:Paragraph({
@@ -500,7 +532,7 @@ UnitsTab:Button({
         local units = refreshUnitList()
         WindUI:Notify({
             Title = "Refreshed",
-            Content = "Found " .. #units .. " units",
+            Content = "Found " .. (#units == 1 and units[1] == "No units found - Place a tower!" and 0 or #units) .. " units",
             Duration = 3
         })
     end
@@ -543,8 +575,12 @@ UnitsTab:Button({
 })
 
 print("[Auto Abilities] UI loaded successfully!")
+task.wait(0.5)
+
 WindUI:Notify({
     Title = "Auto Abilities",
     Content = "UI loaded! Place towers to configure them.",
     Duration = 5
 })
+
+print("[Auto Abilities] Script fully initialized!")
