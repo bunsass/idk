@@ -1,36 +1,24 @@
--- Auto Ability Script with UI
--- Extracted from ALS Halloween Event Script
+-- Auto Ability Script with Advanced UI
+-- Multiple abilities per unit with boss detection
 
 repeat task.wait() until game:IsLoaded()
 
-print("[Auto Abilities] Game loaded, initializing...")
+print("[Auto Abilities] Initializing...")
 
 local Players = game:GetService("Players")
 local LocalPlayer = Players.LocalPlayer
 local RS = game:GetService("ReplicatedStorage")
 local RunService = game:GetService("RunService")
-local HttpService = game:GetService("HttpService")
 
--- Wait for character
 repeat task.wait() until LocalPlayer.Character
-print("[Auto Abilities] Character loaded")
 
--- Config
 getgenv().AutoAbilitiesEnabled = getgenv().AutoAbilitiesEnabled or false
 getgenv().UnitAbilities = getgenv().UnitAbilities or {}
 
--- Load WindUI
 print("[Auto Abilities] Loading WindUI...")
-local success, WindUI = pcall(function()
-    return loadstring(game:HttpGet("https://github.com/Footagesus/WindUI/releases/latest/download/main.lua"))()
-end)
+local WindUI = loadstring(game:HttpGet("https://github.com/Footagesus/WindUI/releases/latest/download/main.lua"))()
+print("[Auto Abilities] WindUI loaded")
 
-if not success then
-    warn("[Auto Abilities] Failed to load WindUI:", WindUI)
-    return
-end
-
-print("[Auto Abilities] WindUI loaded successfully")
 task.wait(0.5)
 
 -- Helper Functions
@@ -81,9 +69,8 @@ local function getAllAbilities(unitName)
                 addAbility(levelData.Ability, level)
             end
             if levelData.Abilities then
-                local abilityList = levelData.Abilities
-                for i = 1, #abilityList do
-                    addAbility(abilityList[i], level)
+                for i = 1, #levelData.Abilities do
+                    addAbility(levelData.Abilities[i], level)
                 end
             end
         end
@@ -102,6 +89,58 @@ local function getTimeScale()
     return timeScale
 end
 
+local function isBossInRange(tower)
+    local inRange = false
+    pcall(function()
+        if not tower or not tower:FindFirstChild("HumanoidRootPart") then return end
+        local towerPos = tower.HumanoidRootPart.Position
+        local range = 50
+        
+        if tower:FindFirstChild("Config") then
+            local config = tower.Config
+            if config:FindFirstChild("Range") then
+                range = config.Range.Value
+            end
+        end
+        
+        local enemies = workspace:FindFirstChild("Enemies")
+        if not enemies then return end
+        
+        for _, enemy in pairs(enemies:GetChildren()) do
+            if enemy:FindFirstChild("Humanoid") and enemy.Humanoid.Health > 0 then
+                if enemy:FindFirstChild("Boss") and enemy.Boss.Value == true then
+                    if enemy:FindFirstChild("HumanoidRootPart") then
+                        local distance = (towerPos - enemy.HumanoidRootPart.Position).Magnitude
+                        if distance <= range then
+                            inRange = true
+                            break
+                        end
+                    end
+                end
+            end
+        end
+    end)
+    return inRange
+end
+
+local function isBossSpawned()
+    local spawned = false
+    pcall(function()
+        local enemies = workspace:FindFirstChild("Enemies")
+        if not enemies then return end
+        
+        for _, enemy in pairs(enemies:GetChildren()) do
+            if enemy:FindFirstChild("Humanoid") and enemy.Humanoid.Health > 0 then
+                if enemy:FindFirstChild("Boss") and enemy.Boss.Value == true then
+                    spawned = true
+                    break
+                end
+            end
+        end
+    end)
+    return spawned
+end
+
 local function getOwnedUnits()
     local units = {}
     pcall(function()
@@ -109,9 +148,8 @@ local function getOwnedUnits()
         if towers then
             for _, tower in pairs(towers:GetChildren()) do
                 if tower:FindFirstChild("Owner") and tower.Owner.Value == LocalPlayer then
-                    local unitName = tower.Name
-                    if not table.find(units, unitName) then
-                        table.insert(units, unitName)
+                    if not table.find(units, tower.Name) then
+                        table.insert(units, tower.Name)
                     end
                 end
             end
@@ -125,8 +163,8 @@ end
 local unitCooldowns = {}
 local unitGlobalCooldowns = {}
 
-local function shouldUseAbility(tower, abilityInfo, unitConfig)
-    if not unitConfig or not unitConfig.enabled then return false end
+local function shouldUseAbility(tower, abilityInfo, abilityConfig)
+    if not abilityConfig or not abilityConfig.enabled then return false end
     
     local unitName = tower.Name
     local abilityName = abilityInfo.name
@@ -156,7 +194,15 @@ local function shouldUseAbility(tower, abilityInfo, unitConfig)
         if (now - lastUse) < adjustedCooldown then return false end
     end
     
-    local conditions = unitConfig.conditions or {}
+    local mode = abilityConfig.mode or "Always On"
+    
+    if mode == "Boss In Range" then
+        if not isBossInRange(tower) then return false end
+    elseif mode == "Boss Spawn" then
+        if not isBossSpawned() then return false end
+    end
+    
+    local conditions = abilityConfig.conditions or {}
     for i = 1, #conditions do
         local condition = conditions[i]
         if condition == "Wave >= 10" then
@@ -167,6 +213,10 @@ local function shouldUseAbility(tower, abilityInfo, unitConfig)
             local wave = 0
             pcall(function() wave = RS.Wave.Value end)
             if wave < 20 then return false end
+        elseif condition == "Wave >= 30" then
+            local wave = 0
+            pcall(function() wave = RS.Wave.Value end)
+            if wave < 30 then return false end
         elseif condition == "Level >= 3" then
             if currentLevel < 3 then return false end
         elseif condition == "Level >= 5" then
@@ -195,12 +245,14 @@ local function startAutoAbilities()
                         local unitName = tower.Name
                         local unitConfig = getgenv().UnitAbilities[unitName]
                         
-                        if unitConfig and unitConfig.enabled then
+                        if unitConfig then
                             local abilities = getAllAbilities(unitName)
                             
                             for abilityName, abilityInfo in pairs(abilities) do
                                 if not abilityInfo.isAttribute then
-                                    if shouldUseAbility(tower, abilityInfo, unitConfig) then
+                                    local abilityConfig = unitConfig[abilityName]
+                                    
+                                    if abilityConfig and shouldUseAbility(tower, abilityInfo, abilityConfig) then
                                         pcall(function()
                                             local remote = RS:FindFirstChild("Remotes")
                                             if remote then
@@ -232,7 +284,7 @@ local function startAutoAbilities()
                 end
             end
             
-            task.wait(0.5)
+            task.wait(0.3)
         end
         
         autoAbilityRunning = false
@@ -240,78 +292,53 @@ local function startAutoAbilities()
 end
 
 -- Create UI
-print("[Auto Abilities] Creating window...")
+print("[Auto Abilities] Creating UI...")
 
-local Window
-local windowSuccess = pcall(function()
-    Window = WindUI:CreateWindow({
+local Window = WindUI:CreateWindow({
+    Title = "Auto Abilities",
+    Author = "ALS",
+    Folder = "AutoAbilities",
+    Size = UDim2.fromOffset(700, 500),
+    NewElements = true,
+    HideSearchBar = false,
+    OpenButton = {
         Title = "Auto Abilities",
-        Author = "ALS",
-        Folder = "AutoAbilities",
-        Size = UDim2.fromOffset(600, 460),
-        NewElements = true,
-        HideSearchBar = false,
-        OpenButton = {
-            Title = "Auto Abilities",
-            CornerRadius = UDim.new(1, 0),
-            StrokeThickness = 1,
-            Enabled = true,
-            Draggable = true,
-            OnlyMobile = false,
-            Color = ColorSequence.new(Color3.fromRGB(48, 255, 106), Color3.fromRGB(231, 255, 47)),
-        },
-    })
-end)
-
-if not windowSuccess or not Window then
-    warn("[Auto Abilities] Failed to create window")
-    return
-end
-
-print("[Auto Abilities] Window created successfully")
-task.wait(0.3)
-
-local MainSection = Window:Section({
-    Title = "Main",
-    Icon = "zap",
+        CornerRadius = UDim.new(1, 0),
+        StrokeThickness = 1,
+        Enabled = true,
+        Draggable = true,
+        OnlyMobile = false,
+        Color = ColorSequence.new(Color3.fromRGB(48, 255, 106), Color3.fromRGB(231, 255, 47)),
+    },
 })
 
-local UnitsSection = Window:Section({
-    Title = "Units",
-    Icon = "users",
-})
+local MainSection = Window:Section({ Title = "Main", Icon = "zap" })
+local UnitsSection = Window:Section({ Title = "Units", Icon = "users" })
 
 local MainTab = MainSection:Tab({ Title = "Settings", Icon = "settings" })
-local UnitsTab = UnitsSection:Tab({ Title = "Configure Units", Icon = "sliders" })
 
-print("[Auto Abilities] Tabs created")
+-- Store unit tabs
+getgenv().UnitTabs = getgenv().UnitTabs or {}
 
--- Main Tab Content
 MainTab:Paragraph({
     Title = "⚡ Auto Abilities System",
-    Desc = "Automatically uses abilities for your towers based on conditions you set. Configure each unit in the Units tab."
+    Desc = "Configure each unit's abilities individually. Each ability has its own activation mode and conditions."
 })
 
 MainTab:Space()
 
-local masterToggle = MainTab:Toggle({
+MainTab:Toggle({
     Title = "Enable Auto Abilities",
     Default = getgenv().AutoAbilitiesEnabled,
     Callback = function(val)
         getgenv().AutoAbilitiesEnabled = val
+        WindUI:Notify({
+            Title = "Auto Abilities",
+            Content = val and "Enabled" or "Disabled",
+            Duration = 3
+        })
         if val then
-            WindUI:Notify({
-                Title = "Auto Abilities",
-                Content = "Enabled",
-                Duration = 3
-            })
             startAutoAbilities()
-        else
-            WindUI:Notify({
-                Title = "Auto Abilities",
-                Content = "Disabled",
-                Duration = 3
-            })
         end
     end
 })
@@ -320,255 +347,135 @@ MainTab:Space()
 MainTab:Divider()
 MainTab:Space()
 
-MainTab:Section({ Title = "ℹ️ Available Conditions" })
+MainTab:Section({ Title = "ℹ️ Activation Modes" })
 
 MainTab:Paragraph({
-    Title = "Condition Types",
-    Desc = "• Wave >= 10 - Use ability after wave 10\n• Wave >= 20 - Use ability after wave 20\n• Level >= 3 - Use when tower is level 3+\n• Level >= 5 - Use when tower is level 5+\n• Max Level - Use only at max level"
+    Title = "Mode Types",
+    Desc = "• Always On - Use ability on cooldown\n• Boss In Range - Only when boss is in tower range\n• Boss Spawn - Only when any boss is spawned"
 })
 
 MainTab:Space()
-MainTab:Section({ Title = "📊 Stats" })
 
-local statsLabel = MainTab:Paragraph({
-    Title = "Current Status",
-    Desc = "Waiting for data..."
+MainTab:Section({ Title = "📋 Additional Conditions" })
+
+MainTab:Paragraph({
+    Title = "Optional Filters",
+    Desc = "• Wave >= 10/20/30 - Wait until specific wave\n• Level >= 3/5 - Wait for tower upgrade\n• Max Level - Only at maximum upgrade"
 })
 
-task.spawn(function()
-    while task.wait(2) do
-        local enabledCount = 0
-        for _, config in pairs(getgenv().UnitAbilities) do
-            if config.enabled then
-                enabledCount = enabledCount + 1
+MainTab:Space()
+
+MainTab:Button({
+    Title = "🔄 Scan for New Units",
+    Callback = function()
+        local units = getOwnedUnits()
+        
+        for _, unitName in ipairs(units) do
+            if not getgenv().UnitTabs[unitName] then
+                local unitTab = UnitsSection:Tab({ Title = unitName, Icon = "box" })
+                getgenv().UnitTabs[unitName] = unitTab
+                
+                unitTab:Paragraph({
+                    Title = "⚙️ " .. unitName,
+                    Desc = "Configure abilities for this unit. Each ability can have its own mode and conditions."
+                })
+                
+                unitTab:Space()
+                
+                if not getgenv().UnitAbilities[unitName] then
+                    getgenv().UnitAbilities[unitName] = {}
+                end
+                
+                local abilities = getAllAbilities(unitName)
+                local abilityList = {}
+                for abilityName, abilityInfo in pairs(abilities) do
+                    if not abilityInfo.isAttribute then
+                        table.insert(abilityList, {name = abilityName, info = abilityInfo})
+                    end
+                end
+                
+                table.sort(abilityList, function(a, b) return a.name < b.name end)
+                
+                for _, abilityData in ipairs(abilityList) do
+                    local abilityName = abilityData.name
+                    local abilityInfo = abilityData.info
+                    
+                    unitTab:Section({ Title = "🎯 " .. abilityName })
+                    
+                    unitTab:Paragraph({
+                        Title = "Info",
+                        Desc = string.format(
+                            "Cooldown: %.1fs | Required Level: %d%s",
+                            abilityInfo.cooldown or 0,
+                            abilityInfo.requiredLevel,
+                            abilityInfo.isGlobal and " | Global CD" or ""
+                        )
+                    })
+                    
+                    if not getgenv().UnitAbilities[unitName][abilityName] then
+                        getgenv().UnitAbilities[unitName][abilityName] = {
+                            enabled = false,
+                            mode = "Always On",
+                            conditions = {}
+                        }
+                    end
+                    
+                    local config = getgenv().UnitAbilities[unitName][abilityName]
+                    
+                    unitTab:Toggle({
+                        Title = "Enable",
+                        Default = config.enabled,
+                        Callback = function(val)
+                            getgenv().UnitAbilities[unitName][abilityName].enabled = val
+                            WindUI:Notify({
+                                Title = unitName,
+                                Content = abilityName .. " " .. (val and "enabled" or "disabled"),
+                                Duration = 2
+                            })
+                        end
+                    })
+                    
+                    unitTab:Dropdown({
+                        Title = "Activation Mode",
+                        Values = {"Always On", "Boss In Range", "Boss Spawn"},
+                        Value = config.mode,
+                        Callback = function(val)
+                            getgenv().UnitAbilities[unitName][abilityName].mode = val
+                        end
+                    })
+                    
+                    unitTab:Dropdown({
+                        Title = "Additional Conditions",
+                        Values = {"Wave >= 10", "Wave >= 20", "Wave >= 30", "Level >= 3", "Level >= 5", "Max Level"},
+                        Multi = true,
+                        Value = config.conditions,
+                        Callback = function(val)
+                            getgenv().UnitAbilities[unitName][abilityName].conditions = val
+                        end
+                    })
+                    
+                    unitTab:Space()
+                end
             end
         end
         
-        local ownedUnits = getOwnedUnits()
-        local statusText = string.format(
-            "Auto Abilities: %s\nConfigured Units: %d\nOwned Units: %d",
-            getgenv().AutoAbilitiesEnabled and "✅ Enabled" or "❌ Disabled",
-            enabledCount,
-            #ownedUnits
-        )
-        
-        pcall(function()
-            if statsLabel and statsLabel.SetDesc then
-                statsLabel:SetDesc(statusText)
-            end
-        end)
-    end
-end)
-
--- Units Tab Content
-UnitsTab:Paragraph({
-    Title = "🎯 Unit Configuration",
-    Desc = "Select a unit below to configure its auto ability settings. The unit must be placed in the game for it to appear in the list."
-})
-
-UnitsTab:Space()
-
-local selectedUnit = nil
-local unitDropdown = nil
-local enableToggle = nil
-local conditionsDropdown = nil
-local abilityInfoLabel = nil
-
-local function refreshUnitList()
-    local units = getOwnedUnits()
-    if #units == 0 then
-        units = {"No units found - Place a tower!"}
-    end
-    
-    if unitDropdown then
-        pcall(function()
-            unitDropdown:Refresh(units)
-        end)
-    end
-    
-    return units
-end
-
-local function updateAbilityInfo(unitName)
-    if not unitName or unitName == "No units found - Place a tower!" then
-        if abilityInfoLabel then
-            pcall(function()
-                abilityInfoLabel:SetDesc("Select a unit to view its abilities.")
-            end)
-        end
-        return
-    end
-    
-    local abilities = getAllAbilities(unitName)
-    if not abilities or not next(abilities) then
-        if abilityInfoLabel then
-            pcall(function()
-                abilityInfoLabel:SetDesc("No abilities found for this unit.")
-            end)
-        end
-        return
-    end
-    
-    local abilityText = ""
-    for abilityName, abilityInfo in pairs(abilities) do
-        if not abilityInfo.isAttribute then
-            abilityText = abilityText .. string.format(
-                "• %s (CD: %.1fs, Lvl %d)%s\n",
-                abilityName,
-                abilityInfo.cooldown or 0,
-                abilityInfo.requiredLevel,
-                abilityInfo.isGlobal and " [Global]" or ""
-            )
-        end
-    end
-    
-    if abilityText == "" then
-        abilityText = "No usable abilities found."
-    end
-    
-    if abilityInfoLabel then
-        pcall(function()
-            abilityInfoLabel:SetDesc(abilityText)
-        end)
-    end
-end
-
-unitDropdown = UnitsTab:Dropdown({
-    Title = "Select Unit",
-    Values = refreshUnitList(),
-    Callback = function(value)
-        if value == "No units found - Place a tower!" then return end
-        
-        selectedUnit = value
-        
-        local config = getgenv().UnitAbilities[value] or { enabled = false, conditions = {} }
-        
-        if enableToggle then
-            pcall(function()
-                enableToggle:Set(config.enabled)
-            end)
-        end
-        
-        if conditionsDropdown then
-            pcall(function()
-                conditionsDropdown:Select(config.conditions or {})
-            end)
-        end
-        
-        updateAbilityInfo(value)
-    end,
-    Searchable = true
-})
-
-UnitsTab:Space()
-
-enableToggle = UnitsTab:Toggle({
-    Title = "Enable Auto Ability",
-    Default = false,
-    Callback = function(val)
-        if not selectedUnit or selectedUnit == "No units found - Place a tower!" then 
-            WindUI:Notify({
-                Title = "Error",
-                Content = "Please select a unit first",
-                Duration = 3
-            })
-            return 
-        end
-        
-        if not getgenv().UnitAbilities[selectedUnit] then
-            getgenv().UnitAbilities[selectedUnit] = { enabled = false, conditions = {} }
-        end
-        
-        getgenv().UnitAbilities[selectedUnit].enabled = val
-        
         WindUI:Notify({
-            Title = selectedUnit,
-            Content = val and "Auto ability enabled" or "Auto ability disabled",
+            Title = "Scan Complete",
+            Content = "Found " .. #units .. " units",
             Duration = 3
         })
     end
 })
 
-UnitsTab:Space()
+MainTab:Space()
 
-conditionsDropdown = UnitsTab:Dropdown({
-    Title = "Conditions (Multi-Select)",
-    Values = {"Wave >= 10", "Wave >= 20", "Level >= 3", "Level >= 5", "Max Level"},
-    Multi = true,
-    Callback = function(values)
-        if not selectedUnit or selectedUnit == "No units found - Place a tower!" then return end
-        
-        if not getgenv().UnitAbilities[selectedUnit] then
-            getgenv().UnitAbilities[selectedUnit] = { enabled = false, conditions = {} }
-        end
-        
-        getgenv().UnitAbilities[selectedUnit].conditions = values
-        
-        local conditionText = #values > 0 and table.concat(values, ", ") or "None"
-        WindUI:Notify({
-            Title = selectedUnit,
-            Content = "Conditions: " .. conditionText,
-            Duration = 3
-        })
-    end
-})
-
-UnitsTab:Space()
-UnitsTab:Divider()
-UnitsTab:Space()
-
-UnitsTab:Section({ Title = "📋 Unit Abilities" })
-
-abilityInfoLabel = UnitsTab:Paragraph({
-    Title = "Ability Information",
-    Desc = "Select a unit to view its abilities."
-})
-
-UnitsTab:Space()
-
-UnitsTab:Button({
-    Title = "🔄 Refresh Unit List",
+MainTab:Button({
+    Title = "🗑️ Clear All Configs",
     Callback = function()
-        local units = refreshUnitList()
+        getgenv().UnitAbilities = {}
         WindUI:Notify({
-            Title = "Refreshed",
-            Content = "Found " .. (#units == 1 and units[1] == "No units found - Place a tower!" and 0 or #units) .. " units",
-            Duration = 3
-        })
-    end
-})
-
-UnitsTab:Space()
-
-UnitsTab:Button({
-    Title = "🗑️ Clear Unit Config",
-    Callback = function()
-        if not selectedUnit or selectedUnit == "No units found - Place a tower!" then 
-            WindUI:Notify({
-                Title = "Error",
-                Content = "Please select a unit first",
-                Duration = 3
-            })
-            return 
-        end
-        
-        getgenv().UnitAbilities[selectedUnit] = { enabled = false, conditions = {} }
-        
-        if enableToggle then
-            pcall(function()
-                enableToggle:Set(false)
-            end)
-        end
-        
-        if conditionsDropdown then
-            pcall(function()
-                conditionsDropdown:Select({})
-            end)
-        end
-        
-        WindUI:Notify({
-            Title = selectedUnit,
-            Content = "Configuration cleared",
+            Title = "Cleared",
+            Content = "All configurations cleared",
             Duration = 3
         })
     end
@@ -578,9 +485,111 @@ print("[Auto Abilities] UI loaded successfully!")
 task.wait(0.5)
 
 WindUI:Notify({
-    Title = "Auto Abilities",
-    Content = "UI loaded! Place towers to configure them.",
+    Title = "Auto Abilities Loaded!",
+    Content = "Click 'Scan for New Units' to start",
     Duration = 5
 })
 
-print("[Auto Abilities] Script fully initialized!")
+-- Auto-scan on load
+task.spawn(function()
+    task.wait(2)
+    local units = getOwnedUnits()
+    if #units > 0 then
+        WindUI:Notify({
+            Title = "Auto-Scanning",
+            Content = "Found " .. #units .. " units, creating tabs...",
+            Duration = 3
+        })
+        
+        for _, unitName in ipairs(units) do
+            if not getgenv().UnitTabs[unitName] then
+                local unitTab = UnitsSection:Tab({ Title = unitName, Icon = "box" })
+                getgenv().UnitTabs[unitName] = unitTab
+                
+                unitTab:Paragraph({
+                    Title = "⚙️ " .. unitName,
+                    Desc = "Configure abilities for this unit. Each ability can have its own mode and conditions."
+                })
+                
+                unitTab:Space()
+                
+                if not getgenv().UnitAbilities[unitName] then
+                    getgenv().UnitAbilities[unitName] = {}
+                end
+                
+                local abilities = getAllAbilities(unitName)
+                local abilityList = {}
+                for abilityName, abilityInfo in pairs(abilities) do
+                    if not abilityInfo.isAttribute then
+                        table.insert(abilityList, {name = abilityName, info = abilityInfo})
+                    end
+                end
+                
+                table.sort(abilityList, function(a, b) return a.name < b.name end)
+                
+                for _, abilityData in ipairs(abilityList) do
+                    local abilityName = abilityData.name
+                    local abilityInfo = abilityData.info
+                    
+                    unitTab:Section({ Title = "🎯 " .. abilityName })
+                    
+                    unitTab:Paragraph({
+                        Title = "Info",
+                        Desc = string.format(
+                            "Cooldown: %.1fs | Required Level: %d%s",
+                            abilityInfo.cooldown or 0,
+                            abilityInfo.requiredLevel,
+                            abilityInfo.isGlobal and " | Global CD" or ""
+                        )
+                    })
+                    
+                    if not getgenv().UnitAbilities[unitName][abilityName] then
+                        getgenv().UnitAbilities[unitName][abilityName] = {
+                            enabled = false,
+                            mode = "Always On",
+                            conditions = {}
+                        }
+                    end
+                    
+                    local config = getgenv().UnitAbilities[unitName][abilityName]
+                    
+                    unitTab:Toggle({
+                        Title = "Enable",
+                        Default = config.enabled,
+                        Callback = function(val)
+                            getgenv().UnitAbilities[unitName][abilityName].enabled = val
+                            WindUI:Notify({
+                                Title = unitName,
+                                Content = abilityName .. " " .. (val and "enabled" or "disabled"),
+                                Duration = 2
+                            })
+                        end
+                    })
+                    
+                    unitTab:Dropdown({
+                        Title = "Activation Mode",
+                        Values = {"Always On", "Boss In Range", "Boss Spawn"},
+                        Value = config.mode,
+                        Callback = function(val)
+                            getgenv().UnitAbilities[unitName][abilityName].mode = val
+                        end
+                    })
+                    
+                    unitTab:Dropdown({
+                        Title = "Additional Conditions",
+                        Values = {"Wave >= 10", "Wave >= 20", "Wave >= 30", "Level >= 3", "Level >= 5", "Max Level"},
+                        Multi = true,
+                        Value = config.conditions,
+                        Callback = function(val)
+                            getgenv().UnitAbilities[unitName][abilityName].conditions = val
+                        end
+                    })
+                    
+                    unitTab:Space()
+                end
+            end
+        end
+    end
+end)
+
+print("[Auto Abilities] Ready!")
