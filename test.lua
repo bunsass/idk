@@ -1,4 +1,4 @@
--- Auto Ability Script with Advanced UI
+-- Auto Ability Script with Advanced UI + Config Save
 -- Multiple abilities per unit with boss detection
 
 repeat task.wait() until game:IsLoaded()
@@ -9,11 +9,72 @@ local Players = game:GetService("Players")
 local LocalPlayer = Players.LocalPlayer
 local RS = game:GetService("ReplicatedStorage")
 local RunService = game:GetService("RunService")
+local HttpService = game:GetService("HttpService")
 
 repeat task.wait() until LocalPlayer.Character
 
-getgenv().AutoAbilitiesEnabled = getgenv().AutoAbilitiesEnabled or false
-getgenv().UnitAbilities = getgenv().UnitAbilities or {}
+-- Config System
+local CONFIG_FOLDER = "AutoAbilities"
+local CONFIG_FILE = "config.json"
+local USER_ID = tostring(LocalPlayer.UserId)
+
+local function getConfigPath()
+    return CONFIG_FOLDER .. "/" .. USER_ID .. "/" .. CONFIG_FILE
+end
+
+local function getUserFolder()
+    return CONFIG_FOLDER .. "/" .. USER_ID
+end
+
+local function loadConfig()
+    if not isfolder(CONFIG_FOLDER) then makefolder(CONFIG_FOLDER) end
+    local userFolder = getUserFolder()
+    if not isfolder(userFolder) then makefolder(userFolder) end
+    
+    local configPath = getConfigPath()
+    if isfile(configPath) then
+        local ok, data = pcall(function()
+            return HttpService:JSONDecode(readfile(configPath))
+        end)
+        if ok and type(data) == "table" then
+            print("[Auto Abilities] Config loaded successfully")
+            return data
+        else
+            print("[Auto Abilities] Config file corrupted, creating new one")
+        end
+    else
+        print("[Auto Abilities] No config found, creating new one")
+    end
+    
+    return {
+        enabled = false,
+        units = {}
+    }
+end
+
+local function saveConfig(config)
+    local userFolder = getUserFolder()
+    if not isfolder(CONFIG_FOLDER) then makefolder(CONFIG_FOLDER) end
+    if not isfolder(userFolder) then makefolder(userFolder) end
+    
+    local ok, err = pcall(function()
+        local json = HttpService:JSONEncode(config)
+        writefile(getConfigPath(), json)
+    end)
+    
+    if ok then
+        print("[Auto Abilities] Config saved successfully")
+    else
+        warn("[Auto Abilities] Failed to save config:", err)
+    end
+    
+    return ok
+end
+
+-- Load config
+local savedConfig = loadConfig()
+getgenv().AutoAbilitiesEnabled = savedConfig.enabled or false
+getgenv().UnitAbilities = savedConfig.units or {}
 
 print("[Auto Abilities] Loading WindUI...")
 local WindUI = loadstring(game:HttpGet("https://github.com/Footagesus/WindUI/releases/latest/download/main.lua"))()
@@ -162,12 +223,22 @@ end
 -- Auto Ability System
 local unitCooldowns = {}
 local unitGlobalCooldowns = {}
+local abilityUsageDebounce = {}
 
 local function shouldUseAbility(tower, abilityInfo, abilityConfig)
     if not abilityConfig or not abilityConfig.enabled then return false end
     
     local unitName = tower.Name
     local abilityName = abilityInfo.name
+    
+    -- Debounce check to prevent rapid re-triggering
+    local debounceKey = tower:GetDebugId() .. "_" .. abilityName
+    if abilityUsageDebounce[debounceKey] then
+        local timeSinceUse = tick() - abilityUsageDebounce[debounceKey]
+        if timeSinceUse < 0.5 then -- Minimum 0.5s between checks for same ability
+            return false
+        end
+    end
     
     local towerUpgrade = tower:FindFirstChild("Upgrade")
     if not towerUpgrade then return false end
@@ -248,12 +319,13 @@ local function startAutoAbilities()
                         if unitConfig then
                             local abilities = getAllAbilities(unitName)
                             
+                            -- Process each ability separately with small delays
                             for abilityName, abilityInfo in pairs(abilities) do
                                 if not abilityInfo.isAttribute then
                                     local abilityConfig = unitConfig[abilityName]
                                     
                                     if abilityConfig and shouldUseAbility(tower, abilityInfo, abilityConfig) then
-                                        pcall(function()
+                                        local success = pcall(function()
                                             local remote = RS:FindFirstChild("Remotes")
                                             if remote then
                                                 local abilityRemote = remote:FindFirstChild("Ability")
@@ -261,6 +333,9 @@ local function startAutoAbilities()
                                                     abilityRemote:InvokeServer(tower, abilityName)
                                                     
                                                     local now = tick()
+                                                    local debounceKey = tower:GetDebugId() .. "_" .. abilityName
+                                                    abilityUsageDebounce[debounceKey] = now
+                                                    
                                                     if abilityInfo.isGlobal then
                                                         if not unitGlobalCooldowns[unitName] then
                                                             unitGlobalCooldowns[unitName] = {}
@@ -273,9 +348,16 @@ local function startAutoAbilities()
                                                         end
                                                         unitCooldowns[towerId][abilityName] = now
                                                     end
+                                                    
+                                                    -- Small delay between abilities on same unit
+                                                    task.wait(0.1)
                                                 end
                                             end
                                         end)
+                                        
+                                        if not success then
+                                            task.wait(0.05)
+                                        end
                                     end
                                 end
                             end
@@ -284,11 +366,20 @@ local function startAutoAbilities()
                 end
             end
             
-            task.wait(0.3)
+            task.wait(0.25)
         end
         
         autoAbilityRunning = false
     end)
+end
+
+-- Auto-save function
+local function autoSave()
+    local config = {
+        enabled = getgenv().AutoAbilitiesEnabled,
+        units = getgenv().UnitAbilities
+    }
+    saveConfig(config)
 end
 
 -- Create UI
@@ -322,7 +413,7 @@ getgenv().UnitTabs = getgenv().UnitTabs or {}
 
 MainTab:Paragraph({
     Title = "⚡ Auto Abilities System",
-    Desc = "Configure each unit's abilities individually. Each ability has its own activation mode and conditions."
+    Desc = "Configure each unit's abilities individually. Each ability has its own activation mode and conditions. Config auto-saves!"
 })
 
 MainTab:Space()
@@ -332,6 +423,7 @@ MainTab:Toggle({
     Default = getgenv().AutoAbilitiesEnabled,
     Callback = function(val)
         getgenv().AutoAbilitiesEnabled = val
+        autoSave()
         WindUI:Notify({
             Title = "Auto Abilities",
             Content = val and "Enabled" or "Disabled",
@@ -361,6 +453,20 @@ MainTab:Section({ Title = "📋 Additional Conditions" })
 MainTab:Paragraph({
     Title = "Optional Filters",
     Desc = "• Wave >= 10/20/30 - Wait until specific wave\n• Level >= 3/5 - Wait for tower upgrade\n• Max Level - Only at maximum upgrade"
+})
+
+MainTab:Space()
+
+MainTab:Button({
+    Title = "💾 Save Config Manually",
+    Callback = function()
+        autoSave()
+        WindUI:Notify({
+            Title = "Config Saved",
+            Content = "Configuration saved successfully",
+            Duration = 3
+        })
+    end
 })
 
 MainTab:Space()
@@ -427,6 +533,7 @@ MainTab:Button({
                         Default = config.enabled,
                         Callback = function(val)
                             getgenv().UnitAbilities[unitName][abilityName].enabled = val
+                            autoSave()
                             WindUI:Notify({
                                 Title = unitName,
                                 Content = abilityName .. " " .. (val and "enabled" or "disabled"),
@@ -441,6 +548,7 @@ MainTab:Button({
                         Value = config.mode,
                         Callback = function(val)
                             getgenv().UnitAbilities[unitName][abilityName].mode = val
+                            autoSave()
                         end
                     })
                     
@@ -451,6 +559,7 @@ MainTab:Button({
                         Value = config.conditions,
                         Callback = function(val)
                             getgenv().UnitAbilities[unitName][abilityName].conditions = val
+                            autoSave()
                         end
                     })
                     
@@ -473,6 +582,7 @@ MainTab:Button({
     Title = "🗑️ Clear All Configs",
     Callback = function()
         getgenv().UnitAbilities = {}
+        autoSave()
         WindUI:Notify({
             Title = "Cleared",
             Content = "All configurations cleared",
@@ -486,7 +596,7 @@ task.wait(0.5)
 
 WindUI:Notify({
     Title = "Auto Abilities Loaded!",
-    Content = "Click 'Scan for New Units' to start",
+    Content = "Config loaded from file. Click 'Scan for New Units' to start",
     Duration = 5
 })
 
@@ -558,6 +668,7 @@ task.spawn(function()
                         Default = config.enabled,
                         Callback = function(val)
                             getgenv().UnitAbilities[unitName][abilityName].enabled = val
+                            autoSave()
                             WindUI:Notify({
                                 Title = unitName,
                                 Content = abilityName .. " " .. (val and "enabled" or "disabled"),
@@ -572,6 +683,7 @@ task.spawn(function()
                         Value = config.mode,
                         Callback = function(val)
                             getgenv().UnitAbilities[unitName][abilityName].mode = val
+                            autoSave()
                         end
                     })
                     
@@ -582,6 +694,7 @@ task.spawn(function()
                         Value = config.conditions,
                         Callback = function(val)
                             getgenv().UnitAbilities[unitName][abilityName].conditions = val
+                            autoSave()
                         end
                     })
                     
@@ -589,6 +702,13 @@ task.spawn(function()
                 end
             end
         end
+    end
+end)
+
+-- Auto-save every 30 seconds
+task.spawn(function()
+    while task.wait(30) do
+        autoSave()
     end
 end)
 
