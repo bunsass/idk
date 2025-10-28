@@ -28,12 +28,14 @@ local Config = {
 -- ========================================
 local configFileName = "reconnect_config.json"
 
--- Check if file functions exist
-local hasFileSupport = writefile and readfile and isfile
+-- Check if file functions exist (some executors don't have isfile)
+local hasWriteFile = writefile ~= nil
+local hasReadFile = readfile ~= nil
+local hasIsFile = isfile ~= nil
 
 local function saveConfig()
-    if not hasFileSupport then
-        addLog("warning", "File functions not available in this executor")
+    if not hasWriteFile then
+        addLog("warning", "writefile() not available in this executor")
         return
     end
     
@@ -45,33 +47,32 @@ local function saveConfig()
     if success then
         addLog("success", "Settings saved!")
     else
-        addLog("error", "Failed to save settings: " .. tostring(err))
+        addLog("error", "Failed to save: " .. tostring(err))
     end
 end
 
 local function loadConfig()
-    if not hasFileSupport then
-        addLog("info", "File functions not available, using defaults")
+    if not hasReadFile then
+        addLog("info", "readfile() not available, using defaults")
         return
     end
     
-    local success, err = pcall(function()
-        if isfile(configFileName) then
-            local configData = readfile(configFileName)
-            local loaded = HttpService:JSONDecode(configData)
-            for key, value in pairs(loaded) do
-                Config[key] = value
-            end
-            addLog("success", "Settings loaded from file!")
-            return true
-        else
-            addLog("info", "No saved settings found, using defaults")
-            return false
+    local success, result = pcall(function()
+        -- Try to read the file directly (might error if file doesn't exist)
+        local configData = readfile(configFileName)
+        local loaded = HttpService:JSONDecode(configData)
+        
+        for key, value in pairs(loaded) do
+            Config[key] = value
         end
+        
+        return true
     end)
     
-    if not success then
-        addLog("info", "Using default settings")
+    if success and result then
+        addLog("success", "Settings loaded from file!")
+    else
+        addLog("info", "No saved settings found, using defaults")
     end
 end
 
@@ -868,11 +869,23 @@ end)
 -- ========================================
 -- INITIALIZE
 -- ========================================
-addLog("success", "Auto-Reconnect Dashboard initializing...")
-sendWebhook("✅ Auto-Reconnect Dashboard loaded!", 3066993)
+print("========================================")
+print("AUTO-RECONNECT DASHBOARD STARTING...")
+print("========================================")
 
--- Load saved config first!
-loadConfig()
+-- Try to load config (might fail, that's okay)
+pcall(function()
+    loadConfig()
+end)
+
+-- Send initial logs
+pcall(function()
+    addLog("success", "Auto-Reconnect Dashboard initializing...")
+end)
+
+pcall(function()
+    sendWebhook("✅ Auto-Reconnect Dashboard loaded!", 3066993)
+end)
 
 -- Wait for character to load
 if not LocalPlayer.Character then
@@ -882,7 +895,14 @@ end
 task.wait(2) -- Wait a bit for game to fully load
 
 -- Create the GUI
-local gui = createGUI()
+local success, err = pcall(function()
+    gui = createGUI()
+end)
+
+if not success then
+    warn("Failed to create GUI:", err)
+    return
+end
 
 addLog("success", "Dashboard ready! Press the minimize button to hide.")
 addLog("info", "Place ID: " .. Config.placeId)
