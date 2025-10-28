@@ -28,19 +28,33 @@ local Config = {
 -- ========================================
 local configFileName = "reconnect_config.json"
 
+-- Check if file functions exist
+local hasFileSupport = writefile and readfile and isfile
+
 local function saveConfig()
+    if not hasFileSupport then
+        addLog("warning", "File functions not available in this executor")
+        return
+    end
+    
     local success, err = pcall(function()
         local configData = HttpService:JSONEncode(Config)
         writefile(configFileName, configData)
-        addLog("success", "Settings saved!")
     end)
     
-    if not success then
+    if success then
+        addLog("success", "Settings saved!")
+    else
         addLog("error", "Failed to save settings: " .. tostring(err))
     end
 end
 
 local function loadConfig()
+    if not hasFileSupport then
+        addLog("info", "File functions not available, using defaults")
+        return
+    end
+    
     local success, err = pcall(function()
         if isfile(configFileName) then
             local configData = readfile(configFileName)
@@ -49,13 +63,15 @@ local function loadConfig()
                 Config[key] = value
             end
             addLog("success", "Settings loaded from file!")
+            return true
         else
             addLog("info", "No saved settings found, using defaults")
+            return false
         end
     end)
     
     if not success then
-        addLog("warning", "Could not load settings: " .. tostring(err))
+        addLog("info", "Using default settings")
     end
 end
 
@@ -73,7 +89,17 @@ local Logs = {}
 local isTeleporting = false
 
 -- ========================================
--- LOGGING SYSTEM
+-- SERVICES (defined early)
+-- ========================================
+local TeleportService = game:GetService("TeleportService")
+local Players = game:GetService("Players")
+local GuiService = game:GetService("GuiService")
+local RunService = game:GetService("RunService")
+local HttpService = game:GetService("HttpService")
+local LocalPlayer = Players.LocalPlayer
+
+-- ========================================
+-- LOGGING SYSTEM (defined before everything else)
 -- ========================================
 local function addLog(type, message)
     table.insert(Logs, 1, {
@@ -151,7 +177,7 @@ local function reconnect(reason)
 end
 
 -- ========================================
--- CREATE GUI
+-- SERVICES (for rest of script)
 -- ========================================
 local function createGUI()
     -- Create ScreenGui
