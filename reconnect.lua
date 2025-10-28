@@ -272,8 +272,41 @@ local function createGUI()
     MinCorner.CornerRadius = UDim.new(0, 8)
     MinCorner.Parent = MinButton
     
+    -- Create Mini Toggle Button (shown when minimized)
+    local MiniButton = Instance.new("TextButton")
+    MiniButton.Name = "MiniButton"
+    MiniButton.Parent = ScreenGui
+    MiniButton.BackgroundColor3 = Color3.fromRGB(40, 30, 60)
+    MiniButton.Position = UDim2.new(0, 10, 0, 10)
+    MiniButton.Size = UDim2.new(0, 200, 0, 50)
+    MiniButton.Font = Enum.Font.GothamBold
+    MiniButton.Text = "🔄 Auto-Reconnect"
+    MiniButton.TextColor3 = Color3.fromRGB(255, 255, 255)
+    MiniButton.TextSize = 16
+    MiniButton.Visible = false
+    MiniButton.Active = true
+    MiniButton.Draggable = true
+    
+    local MiniCorner = Instance.new("UICorner")
+    MiniCorner.CornerRadius = UDim.new(0, 10)
+    MiniCorner.Parent = MiniButton
+    
+    local MiniGradient = Instance.new("UIGradient")
+    MiniGradient.Color = ColorSequence.new{
+        ColorSequenceKeypoint.new(0, Color3.fromRGB(60, 40, 100)),
+        ColorSequenceKeypoint.new(1, Color3.fromRGB(40, 30, 80))
+    }
+    MiniGradient.Rotation = 45
+    MiniGradient.Parent = MiniButton
+    
     MinButton.MouseButton1Click:Connect(function()
-        MainFrame.Visible = not MainFrame.Visible
+        MainFrame.Visible = false
+        MiniButton.Visible = true
+    end)
+    
+    MiniButton.MouseButton1Click:Connect(function()
+        MainFrame.Visible = true
+        MiniButton.Visible = false
     end)
     
     -- Content Frame
@@ -502,7 +535,7 @@ local function createGUI()
     SettingsPadding.PaddingLeft = UDim.new(0, 15)
     SettingsPadding.PaddingRight = UDim.new(0, 15)
     
-    -- Helper function to create settings
+    -- Helper function to create settings with auto-save
     local function createSetting(name, type, defaultValue, description)
         local Setting = Instance.new("Frame")
         Setting.Name = name
@@ -554,6 +587,16 @@ local function createGUI()
             TextBoxCorner.CornerRadius = UDim.new(0, 6)
             TextBoxCorner.Parent = TextBox
             
+            -- Auto-save on focus lost
+            TextBox.FocusLost:Connect(function()
+                if name == "Discord Webhook" then
+                    Config.webhookUrl = TextBox.Text
+                elseif name == "Place ID" then
+                    Config.placeId = TextBox.Text
+                end
+                saveConfig()
+            end)
+            
             return TextBox
         elseif type == "number" then
             local TextBox = Instance.new("TextBox")
@@ -571,6 +614,12 @@ local function createGUI()
             local TextBoxCorner = Instance.new("UICorner")
             TextBoxCorner.CornerRadius = UDim.new(0, 6)
             TextBoxCorner.Parent = TextBox
+            
+            -- Auto-save on focus lost
+            TextBox.FocusLost:Connect(function()
+                Config.maxTimeInServer = tonumber(TextBox.Text) or 0
+                saveConfig()
+            end)
             
             return TextBox
         elseif type == "toggle" then
@@ -593,6 +642,10 @@ local function createGUI()
                 toggleState = not toggleState
                 Toggle.Text = toggleState and "ON" or "OFF"
                 Toggle.BackgroundColor3 = toggleState and Color3.fromRGB(100, 200, 100) or Color3.fromRGB(100, 100, 100)
+                
+                -- Auto-save when toggled
+                Config.autoReconnect = toggleState
+                saveConfig()
             end)
             
             return Toggle
@@ -600,44 +653,18 @@ local function createGUI()
     end
     
     -- Create settings
-    local WebhookBox = createSetting("Discord Webhook", "text", Config.webhookUrl, "Send logs to Discord webhook")
-    local PlaceIDBox = createSetting("Place ID", "text", Config.placeId, "Game place ID to reconnect to")
-    local MaxTimeBox = createSetting("Max Time (minutes)", "number", Config.maxTimeInServer, "Auto-reconnect after this time (0 = unlimited)")
-    local AutoReconnectToggle = createSetting("Auto Reconnect", "toggle", Config.autoReconnect, "Automatically reconnect on disconnect")
+    local WebhookBox = createSetting("Discord Webhook", "text", Config.webhookUrl, "Send logs to Discord (auto-saves)")
+    local PlaceIDBox = createSetting("Place ID", "text", Config.placeId, "Game to reconnect to (auto-saves)")
+    local MaxTimeBox = createSetting("Max Time (minutes)", "number", Config.maxTimeInServer, "Auto-reconnect timer, 0 = unlimited (auto-saves)")
+    local AutoReconnectToggle = createSetting("Auto Reconnect", "toggle", Config.autoReconnect, "Enable/disable auto-reconnect (auto-saves)")
     
-    -- Save Settings Button
-    local SaveButton = Instance.new("TextButton")
-    SaveButton.Parent = SettingsScroll
-    SaveButton.BackgroundColor3 = Color3.fromRGB(150, 100, 255)
-    SaveButton.Size = UDim2.new(1, -30, 0, 40)
-    SaveButton.Font = Enum.Font.GothamBold
-    SaveButton.Text = "💾 Save Settings"
-    SaveButton.TextColor3 = Color3.fromRGB(255, 255, 255)
-    SaveButton.TextSize = 16
-    
-    local SaveCorner = Instance.new("UICorner")
-    SaveCorner.CornerRadius = UDim.new(0, 10)
-    SaveCorner.Parent = SaveButton
-    
-    SaveButton.MouseButton1Click:Connect(function()
-        Config.webhookUrl = WebhookBox.Text
-        Config.placeId = PlaceIDBox.Text
-        Config.maxTimeInServer = tonumber(MaxTimeBox.Text) or 0
-        Config.autoReconnect = AutoReconnectToggle.Text == "ON"
-        
-        saveConfig() -- Save to persistent storage!
-        addLog("success", "Settings saved!")
-        SettingsPanel.Visible = false
-        Content.Visible = true
-    end)
-    
-    -- Back Button
+    -- Back Button (close settings)
     local BackButton = Instance.new("TextButton")
     BackButton.Parent = SettingsScroll
     BackButton.BackgroundColor3 = Color3.fromRGB(100, 100, 100)
-    BackButton.Size = UDim2.new(1, -30, 0, 35)
+    BackButton.Size = UDim2.new(1, -30, 0, 40)
     BackButton.Font = Enum.Font.GothamBold
-    BackButton.Text = "← Back"
+    BackButton.Text = "← Close Settings"
     BackButton.TextColor3 = Color3.fromRGB(255, 255, 255)
     BackButton.TextSize = 14
     
