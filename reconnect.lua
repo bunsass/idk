@@ -20,7 +20,8 @@ local Config = {
     placeId = "12886143095",
     maxTimeInServer = 60, -- minutes (0 = unlimited)
     autoReconnect = true,
-    guiVisible = true
+    guiVisible = true,
+    verboseLogging = false -- New setting for detailed logs
 }
 
 -- ========================================
@@ -146,6 +147,13 @@ end
 -- ========================================
 -- TELEPORT FUNCTION
 -- ========================================
+local function formatTime(seconds)
+    local hours = math.floor(seconds / 3600)
+    local minutes = math.floor((seconds % 3600) / 60)
+    local secs = seconds % 60
+    return string.format("%02d:%02d:%02d", hours, minutes, secs)
+end
+
 local function reconnect(reason)
     if isTeleporting then
         addLog("warning", "Reconnect already in progress!")
@@ -193,8 +201,8 @@ local function createGUI()
     MainFrame.Parent = ScreenGui
     MainFrame.BackgroundColor3 = Color3.fromRGB(20, 20, 30)
     MainFrame.BorderSizePixel = 0
-    MainFrame.Position = UDim2.new(0.5, -300, 0.5, -250)
-    MainFrame.Size = UDim2.new(0, 600, 0, 500)
+    MainFrame.Position = UDim2.new(0.5, -250, 0.5, -200) -- Smaller and centered
+    MainFrame.Size = UDim2.new(0, 500, 0, 400) -- Smaller size for mobile
     MainFrame.Active = true
     MainFrame.Draggable = true
     
@@ -277,7 +285,7 @@ local function createGUI()
     MiniButton.Name = "MiniButton"
     MiniButton.Parent = ScreenGui
     MiniButton.BackgroundColor3 = Color3.fromRGB(40, 30, 60)
-    MiniButton.Position = UDim2.new(0, 10, 0, 10)
+    MiniButton.Position = UDim2.new(0.5, -100, 0.5, -25) -- Center of screen
     MiniButton.Size = UDim2.new(0, 200, 0, 50)
     MiniButton.Font = Enum.Font.GothamBold
     MiniButton.Text = "🔄 Auto-Reconnect"
@@ -309,13 +317,15 @@ local function createGUI()
         MiniButton.Visible = false
     end)
     
-    -- Content Frame
-    local Content = Instance.new("Frame")
+    -- Content Frame (now scrollable)
+    local Content = Instance.new("ScrollingFrame")
     Content.Name = "Content"
     Content.Parent = MainFrame
     Content.BackgroundTransparency = 1
     Content.Position = UDim2.new(0, 10, 0, 70)
     Content.Size = UDim2.new(1, -20, 1, -80)
+    Content.ScrollBarThickness = 6
+    Content.CanvasSize = UDim2.new(0, 0, 0, 550) -- Allow scrolling
     
     -- Stats Frame
     local StatsFrame = Instance.new("Frame")
@@ -521,7 +531,7 @@ local function createGUI()
     SettingsScroll.BackgroundTransparency = 1
     SettingsScroll.Size = UDim2.new(1, 0, 1, 0)
     SettingsScroll.ScrollBarThickness = 6
-    SettingsScroll.CanvasSize = UDim2.new(0, 0, 0, 400)
+    SettingsScroll.CanvasSize = UDim2.new(0, 0, 0, 480) -- Increased for new toggle
     
     local SettingsList = Instance.new("UIListLayout")
     SettingsList.Parent = SettingsScroll
@@ -644,7 +654,11 @@ local function createGUI()
                 Toggle.BackgroundColor3 = toggleState and Color3.fromRGB(100, 200, 100) or Color3.fromRGB(100, 100, 100)
                 
                 -- Auto-save when toggled
-                Config.autoReconnect = toggleState
+                if name == "Auto Reconnect" then
+                    Config.autoReconnect = toggleState
+                elseif name == "Verbose Logging" then
+                    Config.verboseLogging = toggleState
+                end
                 saveConfig()
             end)
             
@@ -657,6 +671,7 @@ local function createGUI()
     local PlaceIDBox = createSetting("Place ID", "text", Config.placeId, "Game to reconnect to (auto-saves)")
     local MaxTimeBox = createSetting("Max Time (minutes)", "number", Config.maxTimeInServer, "Auto-reconnect timer, 0 = unlimited (auto-saves)")
     local AutoReconnectToggle = createSetting("Auto Reconnect", "toggle", Config.autoReconnect, "Enable/disable auto-reconnect (auto-saves)")
+    local VerboseLoggingToggle = createSetting("Verbose Logging", "toggle", Config.verboseLogging, "Show detailed connection logs (auto-saves)")
     
     -- Back Button (close settings)
     local BackButton = Instance.new("TextButton")
@@ -686,13 +701,6 @@ local function createGUI()
     -- ========================================
     -- UPDATE FUNCTIONS
     -- ========================================
-    local function formatTime(seconds)
-        local hours = math.floor(seconds / 3600)
-        local minutes = math.floor((seconds % 3600) / 60)
-        local secs = seconds % 60
-        return string.format("%02d:%02d:%02d", hours, minutes, secs)
-    end
-    
     local function updateLogs()
         -- Clear old logs
         for _, child in ipairs(LogFrame:GetChildren()) do
@@ -866,8 +874,10 @@ RunService.Heartbeat:Connect(function()
     
     -- If no heartbeat for 5+ seconds, connection is dying
     if timeSinceLastBeat > 5 and not connectionWarningIssued then
-        addLog("warning", string.format("Connection unstable! No heartbeat for %.1fs", timeSinceLastBeat))
-        sendWebhook("⚠️ Connection unstable!", 16776960)
+        if Config.verboseLogging then
+            addLog("warning", string.format("Connection unstable! No heartbeat for %.1fs", timeSinceLastBeat))
+            sendWebhook("⚠️ Connection unstable!", 16776960)
+        end
         connectionWarningIssued = true
     end
     
@@ -886,7 +896,9 @@ end)
 -- ========================================
 Players.PlayerRemoving:Connect(function(player)
     if player == LocalPlayer then
-        addLog("info", "Player being removed from server")
+        local sessionTime = formatTime(Stats.timeInServer)
+        addLog("info", "Player removed from server after " .. sessionTime)
+        
         if Config.autoReconnect then
             reconnect("Player removing event")
         end
