@@ -526,12 +526,57 @@ local function createGUI()
     SettingsPanelCorner.CornerRadius = UDim.new(0, 10)
     SettingsPanelCorner.Parent = SettingsPanel
     
+    -- Settings Header with Back Button
+    local SettingsHeader = Instance.new("Frame")
+    SettingsHeader.Name = "SettingsHeader"
+    SettingsHeader.Parent = SettingsPanel
+    SettingsHeader.BackgroundColor3 = Color3.fromRGB(35, 30, 50)
+    SettingsHeader.BorderSizePixel = 0
+    SettingsHeader.Size = UDim2.new(1, 0, 0, 45)
+    
+    local SettingsHeaderCorner = Instance.new("UICorner")
+    SettingsHeaderCorner.CornerRadius = UDim.new(0, 10)
+    SettingsHeaderCorner.Parent = SettingsHeader
+    
+    local BackButtonTop = Instance.new("TextButton")
+    BackButtonTop.Name = "BackButtonTop"
+    BackButtonTop.Parent = SettingsHeader
+    BackButtonTop.BackgroundColor3 = Color3.fromRGB(100, 100, 100)
+    BackButtonTop.Position = UDim2.new(0, 10, 0.5, -15)
+    BackButtonTop.Size = UDim2.new(0, 60, 0, 30)
+    BackButtonTop.Font = Enum.Font.GothamBold
+    BackButtonTop.Text = "← Back"
+    BackButtonTop.TextColor3 = Color3.fromRGB(255, 255, 255)
+    BackButtonTop.TextSize = 12
+    
+    local BackButtonTopCorner = Instance.new("UICorner")
+    BackButtonTopCorner.CornerRadius = UDim.new(0, 8)
+    BackButtonTopCorner.Parent = BackButtonTop
+    
+    local SettingsTitle = Instance.new("TextLabel")
+    SettingsTitle.Name = "SettingsTitle"
+    SettingsTitle.Parent = SettingsHeader
+    SettingsTitle.BackgroundTransparency = 1
+    SettingsTitle.Position = UDim2.new(0, 80, 0, 0)
+    SettingsTitle.Size = UDim2.new(1, -90, 1, 0)
+    SettingsTitle.Font = Enum.Font.GothamBold
+    SettingsTitle.Text = "⚙️ Settings"
+    SettingsTitle.TextColor3 = Color3.fromRGB(255, 255, 255)
+    SettingsTitle.TextSize = 18
+    SettingsTitle.TextXAlignment = Enum.TextXAlignment.Left
+    
+    BackButtonTop.MouseButton1Click:Connect(function()
+        SettingsPanel.Visible = false
+        Content.Visible = true
+    end)
+    
     local SettingsScroll = Instance.new("ScrollingFrame")
     SettingsScroll.Parent = SettingsPanel
     SettingsScroll.BackgroundTransparency = 1
-    SettingsScroll.Size = UDim2.new(1, 0, 1, 0)
+    SettingsScroll.Position = UDim2.new(0, 0, 0, 50)
+    SettingsScroll.Size = UDim2.new(1, 0, 1, -50)
     SettingsScroll.ScrollBarThickness = 6
-    SettingsScroll.CanvasSize = UDim2.new(0, 0, 0, 480) -- Increased for new toggle
+    SettingsScroll.CanvasSize = UDim2.new(0, 0, 0, 450) -- Adjusted since we removed bottom back button
     
     local SettingsList = Instance.new("UIListLayout")
     SettingsList.Parent = SettingsScroll
@@ -672,25 +717,6 @@ local function createGUI()
     local MaxTimeBox = createSetting("Max Time (minutes)", "number", Config.maxTimeInServer, "Auto-reconnect timer, 0 = unlimited (auto-saves)")
     local AutoReconnectToggle = createSetting("Auto Reconnect", "toggle", Config.autoReconnect, "Enable/disable auto-reconnect (auto-saves)")
     local VerboseLoggingToggle = createSetting("Verbose Logging", "toggle", Config.verboseLogging, "Show detailed connection logs (auto-saves)")
-    
-    -- Back Button (close settings)
-    local BackButton = Instance.new("TextButton")
-    BackButton.Parent = SettingsScroll
-    BackButton.BackgroundColor3 = Color3.fromRGB(100, 100, 100)
-    BackButton.Size = UDim2.new(1, -30, 0, 40)
-    BackButton.Font = Enum.Font.GothamBold
-    BackButton.Text = "← Close Settings"
-    BackButton.TextColor3 = Color3.fromRGB(255, 255, 255)
-    BackButton.TextSize = 14
-    
-    local BackCorner = Instance.new("UICorner")
-    BackCorner.CornerRadius = UDim.new(0, 10)
-    BackCorner.Parent = BackButton
-    
-    BackButton.MouseButton1Click:Connect(function()
-        SettingsPanel.Visible = false
-        Content.Visible = true
-    end)
     
     -- Settings Button Click
     SettingsButton.MouseButton1Click:Connect(function()
@@ -897,10 +923,11 @@ end)
 Players.PlayerRemoving:Connect(function(player)
     if player == LocalPlayer then
         local sessionTime = formatTime(Stats.timeInServer)
-        addLog("info", "Player removed from server after " .. sessionTime)
+        addLog("info", "Session ended after " .. sessionTime)
+        sendWebhook("⏱️ Session ended - Duration: " .. sessionTime, 3447003)
         
         if Config.autoReconnect then
-            reconnect("Player removing event")
+            reconnect("Session ended, reconnecting...")
         end
     end
 end)
