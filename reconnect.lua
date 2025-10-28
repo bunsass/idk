@@ -26,40 +26,37 @@ local Config = {
 -- ========================================
 -- PERSISTENT STORAGE FUNCTIONS
 -- ========================================
+local configFileName = "reconnect_config.json"
+
 local function saveConfig()
-    if not window.storage then
-        addLog("warning", "Storage API not available")
-        return false
-    end
-    
-    pcall(function()
+    local success, err = pcall(function()
         local configData = HttpService:JSONEncode(Config)
-        window.storage.set("reconnect_config", configData, false)
-        addLog("success", "Settings saved to persistent storage!")
+        writefile(configFileName, configData)
+        addLog("success", "Settings saved!")
     end)
+    
+    if not success then
+        addLog("error", "Failed to save settings: " .. tostring(err))
+    end
 end
 
 local function loadConfig()
-    if not window.storage then
-        addLog("info", "Storage API not available, using defaults")
-        return
-    end
-    
-    pcall(function()
-        window.storage.get("reconnect_config", false):andThen(function(result)
-            if result and result.value then
-                local loaded = HttpService:JSONDecode(result.value)
-                for key, value in pairs(loaded) do
-                    Config[key] = value
-                end
-                addLog("success", "Settings loaded from storage!")
-            else
-                addLog("info", "No saved settings found, using defaults")
+    local success, err = pcall(function()
+        if isfile(configFileName) then
+            local configData = readfile(configFileName)
+            local loaded = HttpService:JSONDecode(configData)
+            for key, value in pairs(loaded) do
+                Config[key] = value
             end
-        end):catch(function(err)
-            addLog("info", "No saved config found, using defaults")
-        end)
+            addLog("success", "Settings loaded from file!")
+        else
+            addLog("info", "No saved settings found, using defaults")
+        end
     end)
+    
+    if not success then
+        addLog("warning", "Could not load settings: " .. tostring(err))
+    end
 end
 
 -- ========================================
@@ -601,6 +598,7 @@ local function createGUI()
         Config.maxTimeInServer = tonumber(MaxTimeBox.Text) or 0
         Config.autoReconnect = AutoReconnectToggle.Text == "ON"
         
+        saveConfig() -- Save to persistent storage!
         addLog("success", "Settings saved!")
         SettingsPanel.Visible = false
         Content.Visible = true
@@ -846,6 +844,9 @@ end)
 -- ========================================
 addLog("success", "Auto-Reconnect Dashboard initializing...")
 sendWebhook("✅ Auto-Reconnect Dashboard loaded!", 3066993)
+
+-- Load saved config first!
+loadConfig()
 
 -- Wait for character to load
 if not LocalPlayer.Character then
