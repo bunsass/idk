@@ -21,7 +21,8 @@ local Config = {
     maxTimeInServer = 60, -- minutes (0 = unlimited)
     autoReconnect = true,
     guiVisible = true,
-    verboseLogging = false -- New setting for detailed logs
+    verboseLogging = false, -- New setting for detailed logs
+    enableMaxTime = false -- Toggle for max time feature
 }
 
 -- ========================================
@@ -576,7 +577,7 @@ local function createGUI()
     SettingsScroll.Position = UDim2.new(0, 0, 0, 50)
     SettingsScroll.Size = UDim2.new(1, 0, 1, -50)
     SettingsScroll.ScrollBarThickness = 6
-    SettingsScroll.CanvasSize = UDim2.new(0, 0, 0, 450) -- Adjusted since we removed bottom back button
+    SettingsScroll.CanvasSize = UDim2.new(0, 0, 0, 530) -- Increased for extra toggle
     
     local SettingsList = Instance.new("UIListLayout")
     SettingsList.Parent = SettingsScroll
@@ -703,6 +704,8 @@ local function createGUI()
                     Config.autoReconnect = toggleState
                 elseif name == "Verbose Logging" then
                     Config.verboseLogging = toggleState
+                elseif name == "Enable Max Time" then
+                    Config.enableMaxTime = toggleState
                 end
                 saveConfig()
             end)
@@ -714,8 +717,9 @@ local function createGUI()
     -- Create settings
     local WebhookBox = createSetting("Discord Webhook", "text", Config.webhookUrl, "Send logs to Discord (auto-saves)")
     local PlaceIDBox = createSetting("Place ID", "text", Config.placeId, "Game to reconnect to (auto-saves)")
-    local MaxTimeBox = createSetting("Max Time (minutes)", "number", Config.maxTimeInServer, "Auto-reconnect timer, 0 = unlimited (auto-saves)")
     local AutoReconnectToggle = createSetting("Auto Reconnect", "toggle", Config.autoReconnect, "Enable/disable auto-reconnect (auto-saves)")
+    local EnableMaxTimeToggle = createSetting("Enable Max Time", "toggle", Config.enableMaxTime, "Enable auto-reconnect timer (auto-saves)")
+    local MaxTimeBox = createSetting("Max Time (minutes)", "number", Config.maxTimeInServer, "Minutes before auto-reconnect (auto-saves)")
     local VerboseLoggingToggle = createSetting("Verbose Logging", "toggle", Config.verboseLogging, "Show detailed connection logs (auto-saves)")
     
     -- Settings Button Click
@@ -804,8 +808,8 @@ local function createGUI()
         ReconnectsValue.Text = tostring(Stats.totalReconnects)
         StatusValue.Text = Stats.status
         
-        -- Update time color based on progress
-        if Config.maxTimeInServer > 0 then
+        -- Update time color based on progress (only if max time is enabled)
+        if Config.enableMaxTime and Config.maxTimeInServer > 0 then
             local percentage = (Stats.timeInServer / (Config.maxTimeInServer * 60)) * 100
             if percentage >= 90 then
                 TimeValue.TextColor3 = Color3.fromRGB(255, 100, 100)
@@ -824,7 +828,7 @@ local function createGUI()
         else
             TimeValue.TextColor3 = Color3.fromRGB(100, 150, 255)
             ProgressBar.Size = UDim2.new(0, 0, 1, 0)
-            ProgressText.Text = "No time limit set"
+            ProgressText.Text = Config.enableMaxTime and "Set max time in settings" or "Max time disabled"
         end
         
         -- Update status color
@@ -879,8 +883,8 @@ task.spawn(function()
         task.wait(1)
         Stats.timeInServer = Stats.timeInServer + 1
         
-        -- Auto-reconnect based on max time
-        if Config.autoReconnect and Config.maxTimeInServer > 0 then
+        -- Auto-reconnect based on max time (only if enabled)
+        if Config.autoReconnect and Config.enableMaxTime and Config.maxTimeInServer > 0 then
             if Stats.timeInServer >= Config.maxTimeInServer * 60 then
                 reconnect("Max time limit reached")
             end
