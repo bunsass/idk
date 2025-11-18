@@ -1,5 +1,5 @@
 -- ========================================
--- AUTO-RECONNECT DASHBOARD GUI FOR ROBLOX
+-- MOBILE-OPTIMIZED AUTO-RECONNECT DASHBOARD
 -- ========================================
 -- Put this in your Delta autoexec folder!
 -- Make sure "Verify Teleports" is OFF in Delta settings
@@ -10,6 +10,7 @@ local TeleportService = game:GetService("TeleportService")
 local GuiService = game:GetService("GuiService")
 local RunService = game:GetService("RunService")
 local HttpService = game:GetService("HttpService")
+local UserInputService = game:GetService("UserInputService")
 local LocalPlayer = Players.LocalPlayer
 
 -- ========================================
@@ -31,7 +32,6 @@ local Config = {
 local configFileName = "reconnect_config.json"
 local hasWriteFile = writefile ~= nil
 local hasReadFile = readfile ~= nil
-local hasIsFile = isfile ~= nil
 
 local Logs = {}
 local Stats = {
@@ -42,6 +42,7 @@ local Stats = {
 }
 
 local isTeleporting = false
+local isMobile = UserInputService.TouchEnabled and not UserInputService.KeyboardEnabled
 
 local function addLog(type, message)
     table.insert(Logs, 1, {
@@ -164,7 +165,7 @@ local function reconnect(reason)
 end
 
 -- ========================================
--- IMPROVED UI CREATION
+-- MOBILE-OPTIMIZED UI CREATION
 -- ========================================
 local function createGUI()
     local ScreenGui = Instance.new("ScreenGui")
@@ -173,7 +174,15 @@ local function createGUI()
     ScreenGui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
     ScreenGui.IgnoreGuiInset = true
     
-    -- Main Container with better sizing
+    -- Detect screen size for responsive design
+    local ViewportSize = workspace.CurrentCamera.ViewportSize
+    local isSmallScreen = ViewportSize.X < 600 or ViewportSize.Y < 600
+    
+    -- Adjusted sizes for mobile
+    local guiWidth = isMobile and math.min(ViewportSize.X - 20, 380) or 450
+    local guiHeight = isMobile and math.min(ViewportSize.Y - 100, 550) or 500
+    
+    -- Main Container
     local MainFrame = Instance.new("Frame")
     MainFrame.Name = "MainFrame"
     MainFrame.Parent = ScreenGui
@@ -181,13 +190,17 @@ local function createGUI()
     MainFrame.BackgroundColor3 = Color3.fromRGB(25, 25, 35)
     MainFrame.BorderSizePixel = 0
     MainFrame.Position = UDim2.new(0.5, 0, 0.5, 0)
-    MainFrame.Size = UDim2.new(0, 450, 0, 500)
+    MainFrame.Size = UDim2.new(0, guiWidth, 0, guiHeight)
     MainFrame.Active = true
-    MainFrame.Draggable = true
     MainFrame.ClipsDescendants = true
     
+    -- Make draggable only on PC
+    if not isMobile then
+        MainFrame.Draggable = true
+    end
+    
     local MainCorner = Instance.new("UICorner")
-    MainCorner.CornerRadius = UDim.new(0, 10)
+    MainCorner.CornerRadius = UDim.new(0, isMobile and 12 or 10)
     MainCorner.Parent = MainFrame
     
     -- Gradient Background
@@ -199,16 +212,17 @@ local function createGUI()
     Gradient.Rotation = 90
     Gradient.Parent = MainFrame
     
-    -- Header with controls
+    -- Header
+    local headerHeight = isMobile and 55 or 50
     local Header = Instance.new("Frame")
     Header.Name = "Header"
     Header.Parent = MainFrame
     Header.BackgroundColor3 = Color3.fromRGB(30, 30, 45)
     Header.BorderSizePixel = 0
-    Header.Size = UDim2.new(1, 0, 0, 50)
+    Header.Size = UDim2.new(1, 0, 0, headerHeight)
     
     local HeaderCorner = Instance.new("UICorner")
-    HeaderCorner.CornerRadius = UDim.new(0, 10)
+    HeaderCorner.CornerRadius = UDim.new(0, isMobile and 12 or 10)
     HeaderCorner.Parent = Header
     
     -- Accent line
@@ -225,29 +239,31 @@ local function createGUI()
     Title.Parent = Header
     Title.BackgroundTransparency = 1
     Title.Position = UDim2.new(0, 15, 0, 0)
-    Title.Size = UDim2.new(1, -100, 1, 0)
+    Title.Size = UDim2.new(1, -120, 1, 0)
     Title.Font = Enum.Font.GothamBold
     Title.Text = "🔄 Auto-Reconnect"
     Title.TextColor3 = Color3.fromRGB(255, 255, 255)
-    Title.TextSize = 18
+    Title.TextSize = isMobile and 16 or 18
     Title.TextXAlignment = Enum.TextXAlignment.Left
+    Title.TextScaled = isMobile
     
-    -- Minimize Button
+    -- Minimize Button (larger on mobile)
+    local buttonSize = isMobile and 38 or 30
     local MinButton = Instance.new("TextButton")
     MinButton.Name = "MinButton"
     MinButton.Parent = Header
     MinButton.AnchorPoint = Vector2.new(1, 0.5)
     MinButton.BackgroundColor3 = Color3.fromRGB(80, 80, 100)
-    MinButton.Position = UDim2.new(1, -45, 0.5, 0)
-    MinButton.Size = UDim2.new(0, 30, 0, 30)
+    MinButton.Position = UDim2.new(1, -(buttonSize + 15), 0.5, 0)
+    MinButton.Size = UDim2.new(0, buttonSize, 0, buttonSize)
     MinButton.Font = Enum.Font.GothamBold
     MinButton.Text = "−"
     MinButton.TextColor3 = Color3.fromRGB(255, 255, 255)
-    MinButton.TextSize = 18
+    MinButton.TextSize = isMobile and 20 : 18
     MinButton.AutoButtonColor = false
     
     local MinCorner = Instance.new("UICorner")
-    MinCorner.CornerRadius = UDim.new(0, 6)
+    MinCorner.CornerRadius = UDim.new(0, 8)
     MinCorner.Parent = MinButton
     
     -- Close Button
@@ -257,36 +273,41 @@ local function createGUI()
     CloseButton.AnchorPoint = Vector2.new(1, 0.5)
     CloseButton.BackgroundColor3 = Color3.fromRGB(200, 60, 60)
     CloseButton.Position = UDim2.new(1, -10, 0.5, 0)
-    CloseButton.Size = UDim2.new(0, 30, 0, 30)
+    CloseButton.Size = UDim2.new(0, buttonSize, 0, buttonSize)
     CloseButton.Font = Enum.Font.GothamBold
     CloseButton.Text = "×"
     CloseButton.TextColor3 = Color3.fromRGB(255, 255, 255)
-    CloseButton.TextSize = 20
+    CloseButton.TextSize = isMobile and 24 or 20
     CloseButton.AutoButtonColor = false
     
     local CloseCorner = Instance.new("UICorner")
-    CloseCorner.CornerRadius = UDim.new(0, 6)
+    CloseCorner.CornerRadius = UDim.new(0, 8)
     CloseCorner.Parent = CloseButton
     
     CloseButton.MouseButton1Click:Connect(function()
         ScreenGui:Destroy()
     end)
     
-    -- Mini Toggle Button (Icon Style)
+    -- Mini Toggle Button (larger on mobile)
+    local miniSize = isMobile and 70 or 60
     local MiniButton = Instance.new("ImageButton")
     MiniButton.Name = "MiniButton"
     MiniButton.Parent = ScreenGui
     MiniButton.AnchorPoint = Vector2.new(0, 0)
     MiniButton.BackgroundColor3 = Color3.fromRGB(120, 100, 255)
     MiniButton.Position = UDim2.new(0, 10, 0, 10)
-    MiniButton.Size = UDim2.new(0, 60, 0, 60)
+    MiniButton.Size = UDim2.new(0, miniSize, 0, miniSize)
     MiniButton.Visible = false
     MiniButton.Active = true
-    MiniButton.Draggable = true
     MiniButton.Image = ""
     
+    -- Make mini button draggable on mobile
+    if isMobile then
+        MiniButton.Draggable = true
+    end
+    
     local MiniCorner = Instance.new("UICorner")
-    MiniCorner.CornerRadius = UDim.new(0, 12)
+    MiniCorner.CornerRadius = UDim.new(0, 14)
     MiniCorner.Parent = MiniButton
     
     local MiniIcon = Instance.new("TextLabel")
@@ -297,7 +318,7 @@ local function createGUI()
     MiniIcon.Font = Enum.Font.GothamBold
     MiniIcon.Text = "🔄"
     MiniIcon.TextColor3 = Color3.fromRGB(255, 255, 255)
-    MiniIcon.TextSize = 24
+    MiniIcon.TextSize = isMobile and 28 or 24
     
     local MiniLabel = Instance.new("TextLabel")
     MiniLabel.Parent = MiniButton
@@ -307,7 +328,7 @@ local function createGUI()
     MiniLabel.Font = Enum.Font.GothamBold
     MiniLabel.Text = "Dashboard"
     MiniLabel.TextColor3 = Color3.fromRGB(255, 255, 255)
-    MiniLabel.TextSize = 9
+    MiniLabel.TextSize = isMobile and 10 or 9
     
     MinButton.MouseButton1Click:Connect(function()
         MainFrame.Visible = false
@@ -324,38 +345,39 @@ local function createGUI()
     ContentFrame.Name = "ContentFrame"
     ContentFrame.Parent = MainFrame
     ContentFrame.BackgroundTransparency = 1
-    ContentFrame.Position = UDim2.new(0, 0, 0, 50)
-    ContentFrame.Size = UDim2.new(1, 0, 1, -50)
+    ContentFrame.Position = UDim2.new(0, 0, 0, headerHeight)
+    ContentFrame.Size = UDim2.new(1, 0, 1, -headerHeight)
     ContentFrame.ClipsDescendants = true
     
-    -- Tab System
+    -- Tab System (simplified for mobile)
+    local tabHeight = isMobile and 48 or 40
     local TabBar = Instance.new("Frame")
     TabBar.Name = "TabBar"
     TabBar.Parent = ContentFrame
     TabBar.BackgroundColor3 = Color3.fromRGB(30, 30, 45)
     TabBar.BorderSizePixel = 0
-    TabBar.Size = UDim2.new(1, 0, 0, 40)
+    TabBar.Size = UDim2.new(1, 0, 0, tabHeight)
     
     local TabBarLayout = Instance.new("UIListLayout")
     TabBarLayout.Parent = TabBar
     TabBarLayout.FillDirection = Enum.FillDirection.Horizontal
     TabBarLayout.HorizontalAlignment = Enum.HorizontalAlignment.Center
     TabBarLayout.SortOrder = Enum.SortOrder.LayoutOrder
-    TabBarLayout.Padding = UDim.new(0, 5)
+    TabBarLayout.Padding = UDim.new(0, isMobile and 8 or 5)
     
     local TabPadding = Instance.new("UIPadding")
     TabPadding.Parent = TabBar
     TabPadding.PaddingLeft = UDim.new(0, 10)
     TabPadding.PaddingRight = UDim.new(0, 10)
-    TabPadding.PaddingTop = UDim.new(0, 5)
+    TabPadding.PaddingTop = UDim.new(0, isMobile and 8 or 5)
     
     -- Dashboard Tab
     local DashboardTab = Instance.new("Frame")
     DashboardTab.Name = "DashboardTab"
     DashboardTab.Parent = ContentFrame
     DashboardTab.BackgroundTransparency = 1
-    DashboardTab.Position = UDim2.new(0, 0, 0, 45)
-    DashboardTab.Size = UDim2.new(1, 0, 1, -45)
+    DashboardTab.Position = UDim2.new(0, 0, 0, tabHeight + 5)
+    DashboardTab.Size = UDim2.new(1, 0, 1, -(tabHeight + 5))
     DashboardTab.Visible = true
     
     local DashScroll = Instance.new("ScrollingFrame")
@@ -363,30 +385,31 @@ local function createGUI()
     DashScroll.BackgroundTransparency = 1
     DashScroll.BorderSizePixel = 0
     DashScroll.Size = UDim2.new(1, 0, 1, 0)
-    DashScroll.ScrollBarThickness = 4
+    DashScroll.ScrollBarThickness = isMobile and 6 or 4
     DashScroll.ScrollBarImageColor3 = Color3.fromRGB(120, 100, 255)
     DashScroll.CanvasSize = UDim2.new(0, 0, 0, 0)
     DashScroll.AutomaticCanvasSize = Enum.AutomaticSize.Y
+    DashScroll.ScrollingDirection = Enum.ScrollingDirection.Y
     
     local DashLayout = Instance.new("UIListLayout")
     DashLayout.Parent = DashScroll
     DashLayout.SortOrder = Enum.SortOrder.LayoutOrder
-    DashLayout.Padding = UDim.new(0, 10)
+    DashLayout.Padding = UDim.new(0, isMobile and 12 or 10)
     
     local DashPadding = Instance.new("UIPadding")
     DashPadding.Parent = DashScroll
     DashPadding.PaddingTop = UDim.new(0, 10)
     DashPadding.PaddingBottom = UDim.new(0, 10)
-    DashPadding.PaddingLeft = UDim.new(0, 15)
-    DashPadding.PaddingRight = UDim.new(0, 15)
+    DashPadding.PaddingLeft = UDim.new(0, isMobile and 12 or 15)
+    DashPadding.PaddingRight = UDim.new(0, isMobile and 12 or 15)
     
-    -- Stats Container
+    -- Stats Container (adjusted for mobile)
     local StatsContainer = Instance.new("Frame")
     StatsContainer.Name = "StatsContainer"
     StatsContainer.Parent = DashScroll
     StatsContainer.BackgroundColor3 = Color3.fromRGB(30, 30, 45)
     StatsContainer.BorderSizePixel = 0
-    StatsContainer.Size = UDim2.new(1, 0, 0, 160)
+    StatsContainer.Size = UDim2.new(1, 0, 0, isMobile and 180 or 160)
     
     local StatsCorner = Instance.new("UICorner")
     StatsCorner.CornerRadius = UDim.new(0, 8)
@@ -394,7 +417,7 @@ local function createGUI()
     
     local StatsLayout = Instance.new("UIGridLayout")
     StatsLayout.Parent = StatsContainer
-    StatsLayout.CellSize = UDim2.new(0.5, -7.5, 0, 70)
+    StatsLayout.CellSize = UDim2.new(0.5, -7.5, 0, isMobile and 80 or 70)
     StatsLayout.CellPadding = UDim2.new(0, 5, 0, 5)
     StatsLayout.SortOrder = Enum.SortOrder.LayoutOrder
     
@@ -424,7 +447,7 @@ local function createGUI()
         IconLabel.Font = Enum.Font.GothamBold
         IconLabel.Text = icon
         IconLabel.TextColor3 = color
-        IconLabel.TextSize = 16
+        IconLabel.TextSize = isMobile and 18 or 16
         
         local LabelText = Instance.new("TextLabel")
         LabelText.Parent = Card
@@ -434,20 +457,21 @@ local function createGUI()
         LabelText.Font = Enum.Font.Gotham
         LabelText.Text = label
         LabelText.TextColor3 = Color3.fromRGB(150, 150, 150)
-        LabelText.TextSize = 11
+        LabelText.TextSize = isMobile and 12 or 11
         LabelText.TextXAlignment = Enum.TextXAlignment.Left
         
         local ValueLabel = Instance.new("TextLabel")
         ValueLabel.Name = "Value"
         ValueLabel.Parent = Card
         ValueLabel.BackgroundTransparency = 1
-        ValueLabel.Position = UDim2.new(0, 10, 0, 32)
-        ValueLabel.Size = UDim2.new(1, -20, 0, 30)
+        ValueLabel.Position = UDim2.new(0, 10, 0, isMobile and 38 or 32)
+        ValueLabel.Size = UDim2.new(1, -20, 0, isMobile and 35 or 30)
         ValueLabel.Font = Enum.Font.GothamBold
         ValueLabel.Text = value
         ValueLabel.TextColor3 = color
-        ValueLabel.TextSize = 20
+        ValueLabel.TextSize = isMobile and 22 or 20
         ValueLabel.TextXAlignment = Enum.TextXAlignment.Left
+        ValueLabel.TextScaled = isMobile
         
         return ValueLabel
     end
@@ -463,7 +487,7 @@ local function createGUI()
     ProgressContainer.Parent = DashScroll
     ProgressContainer.BackgroundColor3 = Color3.fromRGB(30, 30, 45)
     ProgressContainer.BorderSizePixel = 0
-    ProgressContainer.Size = UDim2.new(1, 0, 0, 60)
+    ProgressContainer.Size = UDim2.new(1, 0, 0, isMobile and 70 or 60)
     
     local ProgressCorner = Instance.new("UICorner")
     ProgressCorner.CornerRadius = UDim.new(0, 8)
@@ -478,15 +502,15 @@ local function createGUI()
     ProgressLabel.Font = Enum.Font.GothamBold
     ProgressLabel.Text = "Time Progress"
     ProgressLabel.TextColor3 = Color3.fromRGB(200, 200, 200)
-    ProgressLabel.TextSize = 12
+    ProgressLabel.TextSize = isMobile and 13 or 12
     ProgressLabel.TextXAlignment = Enum.TextXAlignment.Left
     
     local ProgressBG = Instance.new("Frame")
     ProgressBG.Name = "ProgressBG"
     ProgressBG.Parent = ProgressContainer
     ProgressBG.BackgroundColor3 = Color3.fromRGB(20, 20, 30)
-    ProgressBG.Position = UDim2.new(0, 15, 0, 32)
-    ProgressBG.Size = UDim2.new(1, -30, 0, 6)
+    ProgressBG.Position = UDim2.new(0, 15, 0, isMobile and 35 or 32)
+    ProgressBG.Size = UDim2.new(1, -30, 0, isMobile and 8 or 6)
     
     local ProgressBGCorner = Instance.new("UICorner")
     ProgressBGCorner.CornerRadius = UDim.new(1, 0)
@@ -507,27 +531,20 @@ local function createGUI()
     ProgressText.Name = "ProgressText"
     ProgressText.Parent = ProgressContainer
     ProgressText.BackgroundTransparency = 1
-    ProgressText.Position = UDim2.new(0, 15, 0, 42)
+    ProgressText.Position = UDim2.new(0, 15, 0, isMobile and 48 or 42)
     ProgressText.Size = UDim2.new(1, -30, 0, 12)
     ProgressText.Font = Enum.Font.Gotham
     ProgressText.Text = "No time limit set"
     ProgressText.TextColor3 = Color3.fromRGB(120, 120, 120)
-    ProgressText.TextSize = 10
+    ProgressText.TextSize = isMobile and 11 or 10
     ProgressText.TextXAlignment = Enum.TextXAlignment.Center
     
-    -- Action Buttons
+    -- Action Button (larger on mobile)
     local ButtonsContainer = Instance.new("Frame")
     ButtonsContainer.Name = "ButtonsContainer"
     ButtonsContainer.Parent = DashScroll
     ButtonsContainer.BackgroundTransparency = 1
-    ButtonsContainer.Size = UDim2.new(1, 0, 0, 45)
-    
-    local ButtonsLayout = Instance.new("UIListLayout")
-    ButtonsLayout.Parent = ButtonsContainer
-    ButtonsLayout.FillDirection = Enum.FillDirection.Horizontal
-    ButtonsLayout.HorizontalAlignment = Enum.HorizontalAlignment.Center
-    ButtonsLayout.SortOrder = Enum.SortOrder.LayoutOrder
-    ButtonsLayout.Padding = UDim.new(0, 10)
+    ButtonsContainer.Size = UDim2.new(1, 0, 0, isMobile and 52 or 45)
     
     local ReconnectButton = Instance.new("TextButton")
     ReconnectButton.Name = "ReconnectButton"
@@ -537,7 +554,7 @@ local function createGUI()
     ReconnectButton.Font = Enum.Font.GothamBold
     ReconnectButton.Text = "🔄 Reconnect Now"
     ReconnectButton.TextColor3 = Color3.fromRGB(255, 255, 255)
-    ReconnectButton.TextSize = 14
+    ReconnectButton.TextSize = isMobile and 16 or 14
     ReconnectButton.AutoButtonColor = false
     
     local ReconnectCorner = Instance.new("UICorner")
@@ -553,11 +570,11 @@ local function createGUI()
     LogsHeader.Name = "LogsHeader"
     LogsHeader.Parent = DashScroll
     LogsHeader.BackgroundTransparency = 1
-    LogsHeader.Size = UDim2.new(1, 0, 0, 25)
+    LogsHeader.Size = UDim2.new(1, 0, 0, isMobile and 28 or 25)
     LogsHeader.Font = Enum.Font.GothamBold
     LogsHeader.Text = "📋 Activity Logs"
     LogsHeader.TextColor3 = Color3.fromRGB(200, 200, 200)
-    LogsHeader.TextSize = 13
+    LogsHeader.TextSize = isMobile and 14 or 13
     LogsHeader.TextXAlignment = Enum.TextXAlignment.Left
     
     local LogsContainer = Instance.new("Frame")
@@ -565,7 +582,7 @@ local function createGUI()
     LogsContainer.Parent = DashScroll
     LogsContainer.BackgroundColor3 = Color3.fromRGB(30, 30, 45)
     LogsContainer.BorderSizePixel = 0
-    LogsContainer.Size = UDim2.new(1, 0, 0, 200)
+    LogsContainer.Size = UDim2.new(1, 0, 0, isMobile and 220 or 200)
     
     local LogsCorner = Instance.new("UICorner")
     LogsCorner.CornerRadius = UDim.new(0, 8)
@@ -576,15 +593,16 @@ local function createGUI()
     LogsScroll.Parent = LogsContainer
     LogsScroll.BackgroundTransparency = 1
     LogsScroll.Size = UDim2.new(1, 0, 1, 0)
-    LogsScroll.ScrollBarThickness = 4
+    LogsScroll.ScrollBarThickness = isMobile and 6 or 4
     LogsScroll.ScrollBarImageColor3 = Color3.fromRGB(120, 100, 255)
     LogsScroll.CanvasSize = UDim2.new(0, 0, 0, 0)
     LogsScroll.AutomaticCanvasSize = Enum.AutomaticSize.Y
+    LogsScroll.ScrollingDirection = Enum.ScrollingDirection.Y
     
     local LogsLayout = Instance.new("UIListLayout")
     LogsLayout.Parent = LogsScroll
     LogsLayout.SortOrder = Enum.SortOrder.LayoutOrder
-    LogsLayout.Padding = UDim.new(0, 5)
+    LogsLayout.Padding = UDim.new(0, isMobile and 6 or 5)
     
     local LogsPadding = Instance.new("UIPadding")
     LogsPadding.Parent = LogsScroll
@@ -598,8 +616,8 @@ local function createGUI()
     SettingsTab.Name = "SettingsTab"
     SettingsTab.Parent = ContentFrame
     SettingsTab.BackgroundTransparency = 1
-    SettingsTab.Position = UDim2.new(0, 0, 0, 45)
-    SettingsTab.Size = UDim2.new(1, 0, 1, -45)
+    SettingsTab.Position = UDim2.new(0, 0, 0, tabHeight + 5)
+    SettingsTab.Size = UDim2.new(1, 0, 1, -(tabHeight + 5))
     SettingsTab.Visible = false
     
     local SettingsScroll = Instance.new("ScrollingFrame")
@@ -607,31 +625,34 @@ local function createGUI()
     SettingsScroll.BackgroundTransparency = 1
     SettingsScroll.BorderSizePixel = 0
     SettingsScroll.Size = UDim2.new(1, 0, 1, 0)
-    SettingsScroll.ScrollBarThickness = 4
+    SettingsScroll.ScrollBarThickness = isMobile and 6 or 4
     SettingsScroll.ScrollBarImageColor3 = Color3.fromRGB(120, 100, 255)
     SettingsScroll.CanvasSize = UDim2.new(0, 0, 0, 0)
     SettingsScroll.AutomaticCanvasSize = Enum.AutomaticSize.Y
+    SettingsScroll.ScrollingDirection = Enum.ScrollingDirection.Y
     
     local SettingsLayout = Instance.new("UIListLayout")
     SettingsLayout.Parent = SettingsScroll
     SettingsLayout.SortOrder = Enum.SortOrder.LayoutOrder
-    SettingsLayout.Padding = UDim.new(0, 10)
+    SettingsLayout.Padding = UDim.new(0, isMobile and 12 or 10)
     
     local SettingsPadding = Instance.new("UIPadding")
     SettingsPadding.Parent = SettingsScroll
     SettingsPadding.PaddingTop = UDim.new(0, 15)
     SettingsPadding.PaddingBottom = UDim.new(0, 15)
-    SettingsPadding.PaddingLeft = UDim.new(0, 15)
-    SettingsPadding.PaddingRight = UDim.new(0, 15)
+    SettingsPadding.PaddingLeft = UDim.new(0, isMobile and 12 or 15)
+    SettingsPadding.PaddingRight = UDim.new(0, isMobile and 12 or 15)
     
     -- Helper function to create settings
     local function createSetting(name, type, description, defaultValue)
+        local settingHeight = isMobile and 85 or 75
+        
         local Setting = Instance.new("Frame")
         Setting.Name = name
         Setting.Parent = SettingsScroll
         Setting.BackgroundColor3 = Color3.fromRGB(30, 30, 45)
         Setting.BorderSizePixel = 0
-        Setting.Size = UDim2.new(1, 0, 0, 75)
+        Setting.Size = UDim2.new(1, 0, 0, settingHeight)
         
         local SettingCorner = Instance.new("UICorner")
         SettingCorner.CornerRadius = UDim.new(0, 8)
@@ -645,7 +666,7 @@ local function createGUI()
         NameLabel.Font = Enum.Font.GothamBold
         NameLabel.Text = name
         NameLabel.TextColor3 = Color3.fromRGB(255, 255, 255)
-        NameLabel.TextSize = 13
+        NameLabel.TextSize = isMobile and 14 or 13
         NameLabel.TextXAlignment = Enum.TextXAlignment.Left
         
         local DescLabel = Instance.new("TextLabel")
@@ -656,7 +677,7 @@ local function createGUI()
         DescLabel.Font = Enum.Font.Gotham
         DescLabel.Text = description
         DescLabel.TextColor3 = Color3.fromRGB(130, 130, 130)
-        DescLabel.TextSize = 10
+        DescLabel.TextSize = isMobile and 11 or 10
         DescLabel.TextXAlignment = Enum.TextXAlignment.Left
         DescLabel.TextWrapped = true
         
@@ -664,13 +685,13 @@ local function createGUI()
             local TextBox = Instance.new("TextBox")
             TextBox.Parent = Setting
             TextBox.BackgroundColor3 = Color3.fromRGB(20, 20, 35)
-            TextBox.Position = UDim2.new(0, 12, 0, 45)
-            TextBox.Size = UDim2.new(1, -24, 0, 25)
+            TextBox.Position = UDim2.new(0, 12, 0, isMobile and 50 or 45)
+            TextBox.Size = UDim2.new(1, -24, 0, isMobile and 30 or 25)
             TextBox.Font = Enum.Font.Gotham
             TextBox.PlaceholderText = defaultValue
             TextBox.Text = defaultValue
             TextBox.TextColor3 = Color3.fromRGB(255, 255, 255)
-            TextBox.TextSize = 11
+            TextBox.TextSize = isMobile and 12 or 11
             TextBox.ClearTextOnFocus = false
             TextBox.TextXAlignment = Enum.TextXAlignment.Left
             
@@ -698,13 +719,13 @@ local function createGUI()
             local TextBox = Instance.new("TextBox")
             TextBox.Parent = Setting
             TextBox.BackgroundColor3 = Color3.fromRGB(20, 20, 35)
-            TextBox.Position = UDim2.new(0, 12, 0, 45)
-            TextBox.Size = UDim2.new(1, -24, 0, 25)
+            TextBox.Position = UDim2.new(0, 12, 0, isMobile and 50 or 45)
+            TextBox.Size = UDim2.new(1, -24, 0, isMobile and 30 or 25)
             TextBox.Font = Enum.Font.Gotham
             TextBox.PlaceholderText = tostring(defaultValue)
             TextBox.Text = tostring(defaultValue)
             TextBox.TextColor3 = Color3.fromRGB(255, 255, 255)
-            TextBox.TextSize = 11
+            TextBox.TextSize = isMobile and 12 or 11
             TextBox.ClearTextOnFocus = false
             TextBox.TextXAlignment = Enum.TextXAlignment.Left
             
@@ -727,20 +748,23 @@ local function createGUI()
             return TextBox
             
         elseif type == "toggle" then
+            local toggleWidth = isMobile and 60 or 50
+            local toggleHeight = isMobile and 32 or 25
+            
             local Toggle = Instance.new("TextButton")
             Toggle.Parent = Setting
             Toggle.AnchorPoint = Vector2.new(1, 0)
             Toggle.BackgroundColor3 = defaultValue and Color3.fromRGB(100, 200, 100) or Color3.fromRGB(60, 60, 70)
-            Toggle.Position = UDim2.new(1, -12, 0, 45)
-            Toggle.Size = UDim2.new(0, 50, 0, 25)
+            Toggle.Position = UDim2.new(1, -12, 0, isMobile and 50 or 45)
+            Toggle.Size = UDim2.new(0, toggleWidth, 0, toggleHeight)
             Toggle.Font = Enum.Font.GothamBold
             Toggle.Text = defaultValue and "ON" or "OFF"
             Toggle.TextColor3 = Color3.fromRGB(255, 255, 255)
-            Toggle.TextSize = 11
+            Toggle.TextSize = isMobile and 13 or 11
             Toggle.AutoButtonColor = false
             
             local ToggleCorner = Instance.new("UICorner")
-            ToggleCorner.CornerRadius = UDim.new(0, 5)
+            ToggleCorner.CornerRadius = UDim.new(0, 6)
             ToggleCorner.Parent = Toggle
             
             local toggleState = defaultValue
@@ -773,14 +797,16 @@ local function createGUI()
     
     -- Tab buttons
     local function createTabButton(text, targetTab)
+        local tabWidth = isMobile and 110 or 100
+        
         local TabButton = Instance.new("TextButton")
         TabButton.Parent = TabBar
         TabButton.BackgroundColor3 = Color3.fromRGB(40, 40, 60)
-        TabButton.Size = UDim2.new(0, 100, 0, 30)
+        TabButton.Size = UDim2.new(0, tabWidth, 0, isMobile and 35 or 30)
         TabButton.Font = Enum.Font.GothamBold
         TabButton.Text = text
         TabButton.TextColor3 = Color3.fromRGB(200, 200, 200)
-        TabButton.TextSize = 12
+        TabButton.TextSize = isMobile and 13 or 12
         TabButton.AutoButtonColor = false
         
         local TabCorner = Instance.new("UICorner")
@@ -824,12 +850,14 @@ local function createGUI()
         end
         
         for i, log in ipairs(Logs) do
+            local logHeight = isMobile and 52 or 45
+            
             local LogEntry = Instance.new("Frame")
             LogEntry.Name = "LogEntry" .. i
             LogEntry.Parent = LogsScroll
             LogEntry.BackgroundColor3 = Color3.fromRGB(35, 35, 50)
             LogEntry.BorderSizePixel = 0
-            LogEntry.Size = UDim2.new(1, 0, 0, 45)
+            LogEntry.Size = UDim2.new(1, 0, 0, logHeight)
             
             local LogCorner = Instance.new("UICorner")
             LogCorner.CornerRadius = UDim.new(0, 6)
@@ -841,7 +869,7 @@ local function createGUI()
             Icon.Position = UDim2.new(0, 8, 0, 0)
             Icon.Size = UDim2.new(0, 30, 1, 0)
             Icon.Font = Enum.Font.GothamBold
-            Icon.TextSize = 16
+            Icon.TextSize = isMobile and 18 or 16
             Icon.TextXAlignment = Enum.TextXAlignment.Center
             
             if log.type == "success" then
@@ -862,23 +890,23 @@ local function createGUI()
             Message.Parent = LogEntry
             Message.BackgroundTransparency = 1
             Message.Position = UDim2.new(0, 38, 0, 5)
-            Message.Size = UDim2.new(1, -75, 0, 20)
+            Message.Size = UDim2.new(1, -75, 0, isMobile and 24 : 20)
             Message.Font = Enum.Font.Gotham
             Message.Text = log.message
             Message.TextColor3 = Color3.fromRGB(220, 220, 220)
-            Message.TextSize = 11
+            Message.TextSize = isMobile and 12 or 11
             Message.TextXAlignment = Enum.TextXAlignment.Left
             Message.TextTruncate = Enum.TextTruncate.AtEnd
             
             local Time = Instance.new("TextLabel")
             Time.Parent = LogEntry
             Time.BackgroundTransparency = 1
-            Time.Position = UDim2.new(0, 38, 0, 25)
+            Time.Position = UDim2.new(0, 38, 0, isMobile and 29 or 25)
             Time.Size = UDim2.new(1, -45, 0, 15)
             Time.Font = Enum.Font.Gotham
             Time.Text = os.date("%H:%M:%S", log.time)
             Time.TextColor3 = Color3.fromRGB(100, 100, 100)
-            Time.TextSize = 9
+            Time.TextSize = isMobile and 10 or 9
             Time.TextXAlignment = Enum.TextXAlignment.Left
         end
     end
@@ -1033,7 +1061,7 @@ if not success then
     return
 end
 
-addLog("success", "Dashboard ready! Click minimize to hide.")
+addLog("success", "Dashboard ready! " .. (isMobile and "Tap minimize to hide." or "Click minimize to hide."))
 addLog("info", "Place ID: " .. Config.placeId)
 addLog("info", "Max time: " .. (Config.maxTimeInServer == 0 and "Unlimited" or Config.maxTimeInServer .. " minutes"))
 addLog("info", "Auto-reconnect: " .. (Config.autoReconnect and "Enabled" or "Disabled"))
@@ -1042,5 +1070,6 @@ Stats.status = "Active"
 
 print("========================================")
 print("AUTO-RECONNECT DASHBOARD LOADED!")
+print("Device: " .. (isMobile and "MOBILE" or "PC"))
 print("Make sure 'Verify Teleports' is OFF in Delta settings!")
 print("========================================")
