@@ -272,25 +272,42 @@ local function createGUI()
         ScreenGui:Destroy()
     end)
     
-    -- Mini Toggle Button
-    local MiniButton = Instance.new("TextButton")
+    -- Mini Toggle Button (Icon Style)
+    local MiniButton = Instance.new("ImageButton")
     MiniButton.Name = "MiniButton"
     MiniButton.Parent = ScreenGui
-    MiniButton.AnchorPoint = Vector2.new(0.5, 0)
-    MiniButton.BackgroundColor3 = Color3.fromRGB(30, 30, 45)
-    MiniButton.Position = UDim2.new(0.5, 0, 0, 10)
-    MiniButton.Size = UDim2.new(0, 180, 0, 45)
-    MiniButton.Font = Enum.Font.GothamBold
-    MiniButton.Text = "🔄 Auto-Reconnect"
-    MiniButton.TextColor3 = Color3.fromRGB(255, 255, 255)
-    MiniButton.TextSize = 14
+    MiniButton.AnchorPoint = Vector2.new(0, 0)
+    MiniButton.BackgroundColor3 = Color3.fromRGB(120, 100, 255)
+    MiniButton.Position = UDim2.new(0, 10, 0, 10)
+    MiniButton.Size = UDim2.new(0, 60, 0, 60)
     MiniButton.Visible = false
     MiniButton.Active = true
     MiniButton.Draggable = true
+    MiniButton.Image = ""
     
     local MiniCorner = Instance.new("UICorner")
-    MiniCorner.CornerRadius = UDim.new(0, 8)
+    MiniCorner.CornerRadius = UDim.new(0, 12)
     MiniCorner.Parent = MiniButton
+    
+    local MiniIcon = Instance.new("TextLabel")
+    MiniIcon.Parent = MiniButton
+    MiniIcon.BackgroundTransparency = 1
+    MiniIcon.Size = UDim2.new(1, 0, 0.6, 0)
+    MiniIcon.Position = UDim2.new(0, 0, 0, 5)
+    MiniIcon.Font = Enum.Font.GothamBold
+    MiniIcon.Text = "🔄"
+    MiniIcon.TextColor3 = Color3.fromRGB(255, 255, 255)
+    MiniIcon.TextSize = 24
+    
+    local MiniLabel = Instance.new("TextLabel")
+    MiniLabel.Parent = MiniButton
+    MiniLabel.BackgroundTransparency = 1
+    MiniLabel.Size = UDim2.new(1, 0, 0.35, 0)
+    MiniLabel.Position = UDim2.new(0, 0, 0.65, 0)
+    MiniLabel.Font = Enum.Font.GothamBold
+    MiniLabel.Text = "Dashboard"
+    MiniLabel.TextColor3 = Color3.fromRGB(255, 255, 255)
+    MiniLabel.TextSize = 9
     
     MinButton.MouseButton1Click:Connect(function()
         MainFrame.Visible = false
@@ -516,7 +533,7 @@ local function createGUI()
     ReconnectButton.Name = "ReconnectButton"
     ReconnectButton.Parent = ButtonsContainer
     ReconnectButton.BackgroundColor3 = Color3.fromRGB(100, 200, 100)
-    ReconnectButton.Size = UDim2.new(0.48, -5, 1, 0)
+    ReconnectButton.Size = UDim2.new(1, 0, 1, 0)
     ReconnectButton.Font = Enum.Font.GothamBold
     ReconnectButton.Text = "🔄 Reconnect Now"
     ReconnectButton.TextColor3 = Color3.fromRGB(255, 255, 255)
@@ -530,21 +547,6 @@ local function createGUI()
     ReconnectButton.MouseButton1Click:Connect(function()
         reconnect("Manual reconnect")
     end)
-    
-    local SettingsButton = Instance.new("TextButton")
-    SettingsButton.Name = "SettingsButton"
-    SettingsButton.Parent = ButtonsContainer
-    SettingsButton.BackgroundColor3 = Color3.fromRGB(120, 100, 255)
-    SettingsButton.Size = UDim2.new(0.48, -5, 1, 0)
-    SettingsButton.Font = Enum.Font.GothamBold
-    SettingsButton.Text = "⚙️ Settings"
-    SettingsButton.TextColor3 = Color3.fromRGB(255, 255, 255)
-    SettingsButton.TextSize = 14
-    SettingsButton.AutoButtonColor = false
-    
-    local SettingsCorner = Instance.new("UICorner")
-    SettingsCorner.CornerRadius = UDim.new(0, 8)
-    SettingsCorner.Parent = SettingsButton
     
     -- Logs Section
     local LogsHeader = Instance.new("TextLabel")
@@ -812,16 +814,6 @@ local function createGUI()
     -- Set initial active tab
     DashTab.BackgroundColor3 = Color3.fromRGB(120, 100, 255)
     DashTab.TextColor3 = Color3.fromRGB(255, 255, 255)
-    
-    -- Also connect settings button
-    SettingsButton.MouseButton1Click:Connect(function()
-        DashboardTab.Visible = false
-        SettingsTab.Visible = true
-        SetTab.BackgroundColor3 = Color3.fromRGB(120, 100, 255)
-        SetTab.TextColor3 = Color3.fromRGB(255, 255, 255)
-        DashTab.BackgroundColor3 = Color3.fromRGB(40, 40, 60)
-        DashTab.TextColor3 = Color3.fromRGB(200, 200, 200)
-    end)
     
     -- Update functions
     local function updateLogs()
