@@ -18,22 +18,44 @@ local LocalPlayer = Players.LocalPlayer
 local Config = {
     webhookUrl = "",
     placeId = "12886143095",
-    maxTimeInServer = 60, -- minutes (0 = unlimited)
+    maxTimeInServer = 60,
     autoReconnect = true,
     guiVisible = true,
-    verboseLogging = false, -- New setting for detailed logs
-    enableMaxTime = false -- Toggle for max time feature
+    verboseLogging = false,
+    enableMaxTime = false
 }
 
 -- ========================================
 -- PERSISTENT STORAGE FUNCTIONS
 -- ========================================
 local configFileName = "reconnect_config.json"
-
--- Check if file functions exist (some executors don't have isfile)
 local hasWriteFile = writefile ~= nil
 local hasReadFile = readfile ~= nil
 local hasIsFile = isfile ~= nil
+
+local Logs = {}
+local Stats = {
+    timeInServer = 0,
+    totalReconnects = 0,
+    lastReconnect = nil,
+    status = "Active"
+}
+
+local isTeleporting = false
+
+local function addLog(type, message)
+    table.insert(Logs, 1, {
+        time = os.time(),
+        type = type,
+        message = message
+    })
+    
+    if #Logs > 50 then
+        table.remove(Logs, #Logs)
+    end
+    
+    print("[" .. type:upper() .. "] " .. message)
+end
 
 local function saveConfig()
     if not hasWriteFile then
@@ -60,7 +82,6 @@ local function loadConfig()
     end
     
     local success, result = pcall(function()
-        -- Try to read the file directly (might error if file doesn't exist)
         local configData = readfile(configFileName)
         local loaded = HttpService:JSONDecode(configData)
         
@@ -76,47 +97,6 @@ local function loadConfig()
     else
         addLog("info", "No saved settings found, using defaults")
     end
-end
-
--- ========================================
--- STATS TRACKING
--- ========================================
-local Stats = {
-    timeInServer = 0,
-    totalReconnects = 0,
-    lastReconnect = nil,
-    status = "Active"
-}
-
-local Logs = {}
-local isTeleporting = false
-
--- ========================================
--- SERVICES (defined early)
--- ========================================
-local TeleportService = game:GetService("TeleportService")
-local Players = game:GetService("Players")
-local GuiService = game:GetService("GuiService")
-local RunService = game:GetService("RunService")
-local HttpService = game:GetService("HttpService")
-local LocalPlayer = Players.LocalPlayer
-
--- ========================================
--- LOGGING SYSTEM (defined before everything else)
--- ========================================
-local function addLog(type, message)
-    table.insert(Logs, 1, {
-        time = os.time(),
-        type = type,
-        message = message
-    })
-    
-    -- Keep only last 50 logs
-    if #Logs > 50 then
-        table.remove(Logs, #Logs)
-    end
-    
-    print("[" .. type:upper() .. "] " .. message)
 end
 
 local function sendWebhook(message, color)
@@ -145,9 +125,6 @@ local function sendWebhook(message, color)
     end)
 end
 
--- ========================================
--- TELEPORT FUNCTION
--- ========================================
 local function formatTime(seconds)
     local hours = math.floor(seconds / 3600)
     local minutes = math.floor((seconds % 3600) / 60)
@@ -187,126 +164,133 @@ local function reconnect(reason)
 end
 
 -- ========================================
--- SERVICES (for rest of script)
+-- IMPROVED UI CREATION
 -- ========================================
 local function createGUI()
-    -- Create ScreenGui
     local ScreenGui = Instance.new("ScreenGui")
     ScreenGui.Name = "AutoReconnectDashboard"
     ScreenGui.ResetOnSpawn = false
     ScreenGui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
+    ScreenGui.IgnoreGuiInset = true
     
-    -- Main Frame
+    -- Main Container with better sizing
     local MainFrame = Instance.new("Frame")
     MainFrame.Name = "MainFrame"
     MainFrame.Parent = ScreenGui
-    MainFrame.BackgroundColor3 = Color3.fromRGB(20, 20, 30)
+    MainFrame.AnchorPoint = Vector2.new(0.5, 0.5)
+    MainFrame.BackgroundColor3 = Color3.fromRGB(25, 25, 35)
     MainFrame.BorderSizePixel = 0
-    MainFrame.Position = UDim2.new(0.5, -250, 0.5, -200) -- Smaller and centered
-    MainFrame.Size = UDim2.new(0, 500, 0, 400) -- Smaller size for mobile
+    MainFrame.Position = UDim2.new(0.5, 0, 0.5, 0)
+    MainFrame.Size = UDim2.new(0, 450, 0, 500)
     MainFrame.Active = true
     MainFrame.Draggable = true
+    MainFrame.ClipsDescendants = true
     
-    -- Corner
-    local Corner = Instance.new("UICorner")
-    Corner.CornerRadius = UDim.new(0, 12)
-    Corner.Parent = MainFrame
+    local MainCorner = Instance.new("UICorner")
+    MainCorner.CornerRadius = UDim.new(0, 10)
+    MainCorner.Parent = MainFrame
     
-    -- Gradient
+    -- Gradient Background
     local Gradient = Instance.new("UIGradient")
     Gradient.Color = ColorSequence.new{
-        ColorSequenceKeypoint.new(0, Color3.fromRGB(30, 20, 50)),
-        ColorSequenceKeypoint.new(1, Color3.fromRGB(20, 20, 40))
+        ColorSequenceKeypoint.new(0, Color3.fromRGB(35, 35, 50)),
+        ColorSequenceKeypoint.new(1, Color3.fromRGB(25, 25, 40))
     }
-    Gradient.Rotation = 45
+    Gradient.Rotation = 90
     Gradient.Parent = MainFrame
     
-    -- Header
+    -- Header with controls
     local Header = Instance.new("Frame")
     Header.Name = "Header"
     Header.Parent = MainFrame
-    Header.BackgroundColor3 = Color3.fromRGB(40, 30, 60)
+    Header.BackgroundColor3 = Color3.fromRGB(30, 30, 45)
     Header.BorderSizePixel = 0
-    Header.Size = UDim2.new(1, 0, 0, 60)
+    Header.Size = UDim2.new(1, 0, 0, 50)
     
     local HeaderCorner = Instance.new("UICorner")
-    HeaderCorner.CornerRadius = UDim.new(0, 12)
+    HeaderCorner.CornerRadius = UDim.new(0, 10)
     HeaderCorner.Parent = Header
+    
+    -- Accent line
+    local AccentLine = Instance.new("Frame")
+    AccentLine.Name = "AccentLine"
+    AccentLine.Parent = Header
+    AccentLine.BackgroundColor3 = Color3.fromRGB(120, 100, 255)
+    AccentLine.BorderSizePixel = 0
+    AccentLine.Position = UDim2.new(0, 0, 1, -3)
+    AccentLine.Size = UDim2.new(1, 0, 0, 3)
     
     local Title = Instance.new("TextLabel")
     Title.Name = "Title"
     Title.Parent = Header
     Title.BackgroundTransparency = 1
-    Title.Position = UDim2.new(0, 20, 0, 0)
-    Title.Size = UDim2.new(1, -120, 1, 0)
+    Title.Position = UDim2.new(0, 15, 0, 0)
+    Title.Size = UDim2.new(1, -100, 1, 0)
     Title.Font = Enum.Font.GothamBold
-    Title.Text = "🔄 Auto-Reconnect Dashboard"
+    Title.Text = "🔄 Auto-Reconnect"
     Title.TextColor3 = Color3.fromRGB(255, 255, 255)
-    Title.TextSize = 20
+    Title.TextSize = 18
     Title.TextXAlignment = Enum.TextXAlignment.Left
+    
+    -- Minimize Button
+    local MinButton = Instance.new("TextButton")
+    MinButton.Name = "MinButton"
+    MinButton.Parent = Header
+    MinButton.AnchorPoint = Vector2.new(1, 0.5)
+    MinButton.BackgroundColor3 = Color3.fromRGB(80, 80, 100)
+    MinButton.Position = UDim2.new(1, -45, 0.5, 0)
+    MinButton.Size = UDim2.new(0, 30, 0, 30)
+    MinButton.Font = Enum.Font.GothamBold
+    MinButton.Text = "−"
+    MinButton.TextColor3 = Color3.fromRGB(255, 255, 255)
+    MinButton.TextSize = 18
+    MinButton.AutoButtonColor = false
+    
+    local MinCorner = Instance.new("UICorner")
+    MinCorner.CornerRadius = UDim.new(0, 6)
+    MinCorner.Parent = MinButton
     
     -- Close Button
     local CloseButton = Instance.new("TextButton")
     CloseButton.Name = "CloseButton"
     CloseButton.Parent = Header
-    CloseButton.BackgroundColor3 = Color3.fromRGB(200, 50, 50)
-    CloseButton.Position = UDim2.new(1, -45, 0.5, -15)
+    CloseButton.AnchorPoint = Vector2.new(1, 0.5)
+    CloseButton.BackgroundColor3 = Color3.fromRGB(200, 60, 60)
+    CloseButton.Position = UDim2.new(1, -10, 0.5, 0)
     CloseButton.Size = UDim2.new(0, 30, 0, 30)
     CloseButton.Font = Enum.Font.GothamBold
-    CloseButton.Text = "X"
+    CloseButton.Text = "×"
     CloseButton.TextColor3 = Color3.fromRGB(255, 255, 255)
-    CloseButton.TextSize = 16
+    CloseButton.TextSize = 20
+    CloseButton.AutoButtonColor = false
     
     local CloseCorner = Instance.new("UICorner")
-    CloseCorner.CornerRadius = UDim.new(0, 8)
+    CloseCorner.CornerRadius = UDim.new(0, 6)
     CloseCorner.Parent = CloseButton
     
     CloseButton.MouseButton1Click:Connect(function()
         ScreenGui:Destroy()
     end)
     
-    -- Minimize Button
-    local MinButton = Instance.new("TextButton")
-    MinButton.Name = "MinButton"
-    MinButton.Parent = Header
-    MinButton.BackgroundColor3 = Color3.fromRGB(100, 100, 100)
-    MinButton.Position = UDim2.new(1, -80, 0.5, -15)
-    MinButton.Size = UDim2.new(0, 30, 0, 30)
-    MinButton.Font = Enum.Font.GothamBold
-    MinButton.Text = "_"
-    MinButton.TextColor3 = Color3.fromRGB(255, 255, 255)
-    MinButton.TextSize = 16
-    
-    local MinCorner = Instance.new("UICorner")
-    MinCorner.CornerRadius = UDim.new(0, 8)
-    MinCorner.Parent = MinButton
-    
-    -- Create Mini Toggle Button (shown when minimized)
+    -- Mini Toggle Button
     local MiniButton = Instance.new("TextButton")
     MiniButton.Name = "MiniButton"
     MiniButton.Parent = ScreenGui
-    MiniButton.BackgroundColor3 = Color3.fromRGB(40, 30, 60)
-    MiniButton.Position = UDim2.new(0.5, -100, 0.5, -25) -- Center of screen
-    MiniButton.Size = UDim2.new(0, 200, 0, 50)
+    MiniButton.AnchorPoint = Vector2.new(0.5, 0)
+    MiniButton.BackgroundColor3 = Color3.fromRGB(30, 30, 45)
+    MiniButton.Position = UDim2.new(0.5, 0, 0, 10)
+    MiniButton.Size = UDim2.new(0, 180, 0, 45)
     MiniButton.Font = Enum.Font.GothamBold
     MiniButton.Text = "🔄 Auto-Reconnect"
     MiniButton.TextColor3 = Color3.fromRGB(255, 255, 255)
-    MiniButton.TextSize = 16
+    MiniButton.TextSize = 14
     MiniButton.Visible = false
     MiniButton.Active = true
     MiniButton.Draggable = true
     
     local MiniCorner = Instance.new("UICorner")
-    MiniCorner.CornerRadius = UDim.new(0, 10)
+    MiniCorner.CornerRadius = UDim.new(0, 8)
     MiniCorner.Parent = MiniButton
-    
-    local MiniGradient = Instance.new("UIGradient")
-    MiniGradient.Color = ColorSequence.new{
-        ColorSequenceKeypoint.new(0, Color3.fromRGB(60, 40, 100)),
-        ColorSequenceKeypoint.new(1, Color3.fromRGB(40, 30, 80))
-    }
-    MiniGradient.Rotation = 45
-    MiniGradient.Parent = MiniButton
     
     MinButton.MouseButton1Click:Connect(function()
         MainFrame.Visible = false
@@ -318,119 +302,183 @@ local function createGUI()
         MiniButton.Visible = false
     end)
     
-    -- Content Frame (now scrollable)
-    local Content = Instance.new("ScrollingFrame")
-    Content.Name = "Content"
-    Content.Parent = MainFrame
-    Content.BackgroundTransparency = 1
-    Content.Position = UDim2.new(0, 10, 0, 70)
-    Content.Size = UDim2.new(1, -20, 1, -80)
-    Content.ScrollBarThickness = 6
-    Content.CanvasSize = UDim2.new(0, 0, 0, 550) -- Allow scrolling
+    -- Content Area
+    local ContentFrame = Instance.new("Frame")
+    ContentFrame.Name = "ContentFrame"
+    ContentFrame.Parent = MainFrame
+    ContentFrame.BackgroundTransparency = 1
+    ContentFrame.Position = UDim2.new(0, 0, 0, 50)
+    ContentFrame.Size = UDim2.new(1, 0, 1, -50)
+    ContentFrame.ClipsDescendants = true
     
-    -- Stats Frame
-    local StatsFrame = Instance.new("Frame")
-    StatsFrame.Name = "StatsFrame"
-    StatsFrame.Parent = Content
-    StatsFrame.BackgroundColor3 = Color3.fromRGB(30, 25, 45)
-    StatsFrame.BorderSizePixel = 0
-    StatsFrame.Size = UDim2.new(1, 0, 0, 150)
+    -- Tab System
+    local TabBar = Instance.new("Frame")
+    TabBar.Name = "TabBar"
+    TabBar.Parent = ContentFrame
+    TabBar.BackgroundColor3 = Color3.fromRGB(30, 30, 45)
+    TabBar.BorderSizePixel = 0
+    TabBar.Size = UDim2.new(1, 0, 0, 40)
+    
+    local TabBarLayout = Instance.new("UIListLayout")
+    TabBarLayout.Parent = TabBar
+    TabBarLayout.FillDirection = Enum.FillDirection.Horizontal
+    TabBarLayout.HorizontalAlignment = Enum.HorizontalAlignment.Center
+    TabBarLayout.SortOrder = Enum.SortOrder.LayoutOrder
+    TabBarLayout.Padding = UDim.new(0, 5)
+    
+    local TabPadding = Instance.new("UIPadding")
+    TabPadding.Parent = TabBar
+    TabPadding.PaddingLeft = UDim.new(0, 10)
+    TabPadding.PaddingRight = UDim.new(0, 10)
+    TabPadding.PaddingTop = UDim.new(0, 5)
+    
+    -- Dashboard Tab
+    local DashboardTab = Instance.new("Frame")
+    DashboardTab.Name = "DashboardTab"
+    DashboardTab.Parent = ContentFrame
+    DashboardTab.BackgroundTransparency = 1
+    DashboardTab.Position = UDim2.new(0, 0, 0, 45)
+    DashboardTab.Size = UDim2.new(1, 0, 1, -45)
+    DashboardTab.Visible = true
+    
+    local DashScroll = Instance.new("ScrollingFrame")
+    DashScroll.Parent = DashboardTab
+    DashScroll.BackgroundTransparency = 1
+    DashScroll.BorderSizePixel = 0
+    DashScroll.Size = UDim2.new(1, 0, 1, 0)
+    DashScroll.ScrollBarThickness = 4
+    DashScroll.ScrollBarImageColor3 = Color3.fromRGB(120, 100, 255)
+    DashScroll.CanvasSize = UDim2.new(0, 0, 0, 0)
+    DashScroll.AutomaticCanvasSize = Enum.AutomaticSize.Y
+    
+    local DashLayout = Instance.new("UIListLayout")
+    DashLayout.Parent = DashScroll
+    DashLayout.SortOrder = Enum.SortOrder.LayoutOrder
+    DashLayout.Padding = UDim.new(0, 10)
+    
+    local DashPadding = Instance.new("UIPadding")
+    DashPadding.Parent = DashScroll
+    DashPadding.PaddingTop = UDim.new(0, 10)
+    DashPadding.PaddingBottom = UDim.new(0, 10)
+    DashPadding.PaddingLeft = UDim.new(0, 15)
+    DashPadding.PaddingRight = UDim.new(0, 15)
+    
+    -- Stats Container
+    local StatsContainer = Instance.new("Frame")
+    StatsContainer.Name = "StatsContainer"
+    StatsContainer.Parent = DashScroll
+    StatsContainer.BackgroundColor3 = Color3.fromRGB(30, 30, 45)
+    StatsContainer.BorderSizePixel = 0
+    StatsContainer.Size = UDim2.new(1, 0, 0, 160)
     
     local StatsCorner = Instance.new("UICorner")
-    StatsCorner.CornerRadius = UDim.new(0, 10)
-    StatsCorner.Parent = StatsFrame
+    StatsCorner.CornerRadius = UDim.new(0, 8)
+    StatsCorner.Parent = StatsContainer
     
-    -- Time Label
-    local TimeLabel = Instance.new("TextLabel")
-    TimeLabel.Name = "TimeLabel"
-    TimeLabel.Parent = StatsFrame
-    TimeLabel.BackgroundTransparency = 1
-    TimeLabel.Position = UDim2.new(0, 20, 0, 15)
-    TimeLabel.Size = UDim2.new(0.3, -30, 0, 25)
-    TimeLabel.Font = Enum.Font.Gotham
-    TimeLabel.Text = "⏱️ Time in Server"
-    TimeLabel.TextColor3 = Color3.fromRGB(180, 180, 180)
-    TimeLabel.TextSize = 14
-    TimeLabel.TextXAlignment = Enum.TextXAlignment.Left
+    local StatsLayout = Instance.new("UIGridLayout")
+    StatsLayout.Parent = StatsContainer
+    StatsLayout.CellSize = UDim2.new(0.5, -7.5, 0, 70)
+    StatsLayout.CellPadding = UDim2.new(0, 5, 0, 5)
+    StatsLayout.SortOrder = Enum.SortOrder.LayoutOrder
     
-    local TimeValue = Instance.new("TextLabel")
-    TimeValue.Name = "TimeValue"
-    TimeValue.Parent = StatsFrame
-    TimeValue.BackgroundTransparency = 1
-    TimeValue.Position = UDim2.new(0, 20, 0, 40)
-    TimeValue.Size = UDim2.new(0.3, -30, 0, 40)
-    TimeValue.Font = Enum.Font.GothamBold
-    TimeValue.Text = "00:00:00"
-    TimeValue.TextColor3 = Color3.fromRGB(100, 255, 150)
-    TimeValue.TextSize = 24
-    TimeValue.TextXAlignment = Enum.TextXAlignment.Left
+    local StatsPadding = Instance.new("UIPadding")
+    StatsPadding.Parent = StatsContainer
+    StatsPadding.PaddingTop = UDim.new(0, 10)
+    StatsPadding.PaddingBottom = UDim.new(0, 10)
+    StatsPadding.PaddingLeft = UDim.new(0, 10)
+    StatsPadding.PaddingRight = UDim.new(0, 10)
     
-    -- Reconnects Label
-    local ReconnectsLabel = Instance.new("TextLabel")
-    ReconnectsLabel.Name = "ReconnectsLabel"
-    ReconnectsLabel.Parent = StatsFrame
-    ReconnectsLabel.BackgroundTransparency = 1
-    ReconnectsLabel.Position = UDim2.new(0.33, 10, 0, 15)
-    ReconnectsLabel.Size = UDim2.new(0.3, -30, 0, 25)
-    ReconnectsLabel.Font = Enum.Font.Gotham
-    ReconnectsLabel.Text = "🔄 Total Reconnects"
-    ReconnectsLabel.TextColor3 = Color3.fromRGB(180, 180, 180)
-    ReconnectsLabel.TextSize = 14
-    ReconnectsLabel.TextXAlignment = Enum.TextXAlignment.Left
+    -- Helper function to create stat cards
+    local function createStatCard(icon, label, value, color, parent)
+        local Card = Instance.new("Frame")
+        Card.Parent = parent
+        Card.BackgroundColor3 = Color3.fromRGB(35, 35, 50)
+        Card.BorderSizePixel = 0
+        
+        local CardCorner = Instance.new("UICorner")
+        CardCorner.CornerRadius = UDim.new(0, 6)
+        CardCorner.Parent = Card
+        
+        local IconLabel = Instance.new("TextLabel")
+        IconLabel.Parent = Card
+        IconLabel.BackgroundTransparency = 1
+        IconLabel.Position = UDim2.new(0, 10, 0, 8)
+        IconLabel.Size = UDim2.new(0, 20, 0, 20)
+        IconLabel.Font = Enum.Font.GothamBold
+        IconLabel.Text = icon
+        IconLabel.TextColor3 = color
+        IconLabel.TextSize = 16
+        
+        local LabelText = Instance.new("TextLabel")
+        LabelText.Parent = Card
+        LabelText.BackgroundTransparency = 1
+        LabelText.Position = UDim2.new(0, 35, 0, 8)
+        LabelText.Size = UDim2.new(1, -40, 0, 20)
+        LabelText.Font = Enum.Font.Gotham
+        LabelText.Text = label
+        LabelText.TextColor3 = Color3.fromRGB(150, 150, 150)
+        LabelText.TextSize = 11
+        LabelText.TextXAlignment = Enum.TextXAlignment.Left
+        
+        local ValueLabel = Instance.new("TextLabel")
+        ValueLabel.Name = "Value"
+        ValueLabel.Parent = Card
+        ValueLabel.BackgroundTransparency = 1
+        ValueLabel.Position = UDim2.new(0, 10, 0, 32)
+        ValueLabel.Size = UDim2.new(1, -20, 0, 30)
+        ValueLabel.Font = Enum.Font.GothamBold
+        ValueLabel.Text = value
+        ValueLabel.TextColor3 = color
+        ValueLabel.TextSize = 20
+        ValueLabel.TextXAlignment = Enum.TextXAlignment.Left
+        
+        return ValueLabel
+    end
     
-    local ReconnectsValue = Instance.new("TextLabel")
-    ReconnectsValue.Name = "ReconnectsValue"
-    ReconnectsValue.Parent = StatsFrame
-    ReconnectsValue.BackgroundTransparency = 1
-    ReconnectsValue.Position = UDim2.new(0.33, 10, 0, 40)
-    ReconnectsValue.Size = UDim2.new(0.3, -30, 0, 40)
-    ReconnectsValue.Font = Enum.Font.GothamBold
-    ReconnectsValue.Text = "0"
-    ReconnectsValue.TextColor3 = Color3.fromRGB(100, 150, 255)
-    ReconnectsValue.TextSize = 24
-    ReconnectsValue.TextXAlignment = Enum.TextXAlignment.Left
-    
-    -- Status Label
-    local StatusLabel = Instance.new("TextLabel")
-    StatusLabel.Name = "StatusLabel"
-    StatusLabel.Parent = StatsFrame
-    StatusLabel.BackgroundTransparency = 1
-    StatusLabel.Position = UDim2.new(0.66, 10, 0, 15)
-    StatusLabel.Size = UDim2.new(0.34, -30, 0, 25)
-    StatusLabel.Font = Enum.Font.Gotham
-    StatusLabel.Text = "📡 Status"
-    StatusLabel.TextColor3 = Color3.fromRGB(180, 180, 180)
-    StatusLabel.TextSize = 14
-    StatusLabel.TextXAlignment = Enum.TextXAlignment.Left
-    
-    local StatusValue = Instance.new("TextLabel")
-    StatusValue.Name = "StatusValue"
-    StatusValue.Parent = StatsFrame
-    StatusValue.BackgroundTransparency = 1
-    StatusValue.Position = UDim2.new(0.66, 10, 0, 40)
-    StatusValue.Size = UDim2.new(0.34, -30, 0, 40)
-    StatusValue.Font = Enum.Font.GothamBold
-    StatusValue.Text = "Active"
-    StatusValue.TextColor3 = Color3.fromRGB(100, 255, 150)
-    StatusValue.TextSize = 20
-    StatusValue.TextXAlignment = Enum.TextXAlignment.Left
+    -- Create stat cards
+    local TimeValue = createStatCard("⏱️", "Time in Server", "00:00:00", Color3.fromRGB(100, 220, 150), StatsContainer)
+    local ReconnectsValue = createStatCard("🔄", "Total Reconnects", "0", Color3.fromRGB(100, 150, 255), StatsContainer)
+    local StatusValue = createStatCard("📡", "Status", "Active", Color3.fromRGB(100, 220, 150), StatsContainer)
     
     -- Progress Bar
-    local ProgressBG = Instance.new("Frame")
-    ProgressBG.Name = "ProgressBG"
-    ProgressBG.Parent = StatsFrame
-    ProgressBG.BackgroundColor3 = Color3.fromRGB(20, 15, 35)
-    ProgressBG.Position = UDim2.new(0, 20, 0, 95)
-    ProgressBG.Size = UDim2.new(1, -40, 0, 8)
+    local ProgressContainer = Instance.new("Frame")
+    ProgressContainer.Name = "ProgressContainer"
+    ProgressContainer.Parent = DashScroll
+    ProgressContainer.BackgroundColor3 = Color3.fromRGB(30, 30, 45)
+    ProgressContainer.BorderSizePixel = 0
+    ProgressContainer.Size = UDim2.new(1, 0, 0, 60)
     
     local ProgressCorner = Instance.new("UICorner")
-    ProgressCorner.CornerRadius = UDim.new(1, 0)
-    ProgressCorner.Parent = ProgressBG
+    ProgressCorner.CornerRadius = UDim.new(0, 8)
+    ProgressCorner.Parent = ProgressContainer
+    
+    local ProgressLabel = Instance.new("TextLabel")
+    ProgressLabel.Name = "ProgressLabel"
+    ProgressLabel.Parent = ProgressContainer
+    ProgressLabel.BackgroundTransparency = 1
+    ProgressLabel.Position = UDim2.new(0, 15, 0, 10)
+    ProgressLabel.Size = UDim2.new(1, -30, 0, 15)
+    ProgressLabel.Font = Enum.Font.GothamBold
+    ProgressLabel.Text = "Time Progress"
+    ProgressLabel.TextColor3 = Color3.fromRGB(200, 200, 200)
+    ProgressLabel.TextSize = 12
+    ProgressLabel.TextXAlignment = Enum.TextXAlignment.Left
+    
+    local ProgressBG = Instance.new("Frame")
+    ProgressBG.Name = "ProgressBG"
+    ProgressBG.Parent = ProgressContainer
+    ProgressBG.BackgroundColor3 = Color3.fromRGB(20, 20, 30)
+    ProgressBG.Position = UDim2.new(0, 15, 0, 32)
+    ProgressBG.Size = UDim2.new(1, -30, 0, 6)
+    
+    local ProgressBGCorner = Instance.new("UICorner")
+    ProgressBGCorner.CornerRadius = UDim.new(1, 0)
+    ProgressBGCorner.Parent = ProgressBG
     
     local ProgressBar = Instance.new("Frame")
     ProgressBar.Name = "ProgressBar"
     ProgressBar.Parent = ProgressBG
-    ProgressBar.BackgroundColor3 = Color3.fromRGB(150, 100, 255)
+    ProgressBar.BackgroundColor3 = Color3.fromRGB(120, 100, 255)
     ProgressBar.BorderSizePixel = 0
     ProgressBar.Size = UDim2.new(0, 0, 1, 0)
     
@@ -440,149 +488,132 @@ local function createGUI()
     
     local ProgressText = Instance.new("TextLabel")
     ProgressText.Name = "ProgressText"
-    ProgressText.Parent = StatsFrame
+    ProgressText.Parent = ProgressContainer
     ProgressText.BackgroundTransparency = 1
-    ProgressText.Position = UDim2.new(0, 20, 0, 110)
-    ProgressText.Size = UDim2.new(1, -40, 0, 20)
+    ProgressText.Position = UDim2.new(0, 15, 0, 42)
+    ProgressText.Size = UDim2.new(1, -30, 0, 12)
     ProgressText.Font = Enum.Font.Gotham
     ProgressText.Text = "No time limit set"
-    ProgressText.TextColor3 = Color3.fromRGB(150, 150, 150)
-    ProgressText.TextSize = 12
+    ProgressText.TextColor3 = Color3.fromRGB(120, 120, 120)
+    ProgressText.TextSize = 10
     ProgressText.TextXAlignment = Enum.TextXAlignment.Center
     
-    -- Reconnect Button
+    -- Action Buttons
+    local ButtonsContainer = Instance.new("Frame")
+    ButtonsContainer.Name = "ButtonsContainer"
+    ButtonsContainer.Parent = DashScroll
+    ButtonsContainer.BackgroundTransparency = 1
+    ButtonsContainer.Size = UDim2.new(1, 0, 0, 45)
+    
+    local ButtonsLayout = Instance.new("UIListLayout")
+    ButtonsLayout.Parent = ButtonsContainer
+    ButtonsLayout.FillDirection = Enum.FillDirection.Horizontal
+    ButtonsLayout.HorizontalAlignment = Enum.HorizontalAlignment.Center
+    ButtonsLayout.SortOrder = Enum.SortOrder.LayoutOrder
+    ButtonsLayout.Padding = UDim.new(0, 10)
+    
     local ReconnectButton = Instance.new("TextButton")
     ReconnectButton.Name = "ReconnectButton"
-    ReconnectButton.Parent = Content
+    ReconnectButton.Parent = ButtonsContainer
     ReconnectButton.BackgroundColor3 = Color3.fromRGB(100, 200, 100)
-    ReconnectButton.Position = UDim2.new(0, 0, 0, 160)
-    ReconnectButton.Size = UDim2.new(0.48, 0, 0, 40)
+    ReconnectButton.Size = UDim2.new(0.48, -5, 1, 0)
     ReconnectButton.Font = Enum.Font.GothamBold
     ReconnectButton.Text = "🔄 Reconnect Now"
     ReconnectButton.TextColor3 = Color3.fromRGB(255, 255, 255)
-    ReconnectButton.TextSize = 16
+    ReconnectButton.TextSize = 14
+    ReconnectButton.AutoButtonColor = false
     
     local ReconnectCorner = Instance.new("UICorner")
-    ReconnectCorner.CornerRadius = UDim.new(0, 10)
+    ReconnectCorner.CornerRadius = UDim.new(0, 8)
     ReconnectCorner.Parent = ReconnectButton
     
     ReconnectButton.MouseButton1Click:Connect(function()
         reconnect("Manual reconnect")
     end)
     
-    -- Settings Button
     local SettingsButton = Instance.new("TextButton")
     SettingsButton.Name = "SettingsButton"
-    SettingsButton.Parent = Content
-    SettingsButton.BackgroundColor3 = Color3.fromRGB(100, 100, 200)
-    SettingsButton.Position = UDim2.new(0.52, 0, 0, 160)
-    SettingsButton.Size = UDim2.new(0.48, 0, 0, 40)
+    SettingsButton.Parent = ButtonsContainer
+    SettingsButton.BackgroundColor3 = Color3.fromRGB(120, 100, 255)
+    SettingsButton.Size = UDim2.new(0.48, -5, 1, 0)
     SettingsButton.Font = Enum.Font.GothamBold
     SettingsButton.Text = "⚙️ Settings"
     SettingsButton.TextColor3 = Color3.fromRGB(255, 255, 255)
-    SettingsButton.TextSize = 16
+    SettingsButton.TextSize = 14
+    SettingsButton.AutoButtonColor = false
     
     local SettingsCorner = Instance.new("UICorner")
-    SettingsCorner.CornerRadius = UDim.new(0, 10)
+    SettingsCorner.CornerRadius = UDim.new(0, 8)
     SettingsCorner.Parent = SettingsButton
     
-    -- Log Frame
-    local LogFrame = Instance.new("ScrollingFrame")
-    LogFrame.Name = "LogFrame"
-    LogFrame.Parent = Content
-    LogFrame.BackgroundColor3 = Color3.fromRGB(30, 25, 45)
-    LogFrame.BorderSizePixel = 0
-    LogFrame.Position = UDim2.new(0, 0, 0, 210)
-    LogFrame.Size = UDim2.new(1, 0, 1, -210)
-    LogFrame.ScrollBarThickness = 6
-    LogFrame.CanvasSize = UDim2.new(0, 0, 0, 0)
+    -- Logs Section
+    local LogsHeader = Instance.new("TextLabel")
+    LogsHeader.Name = "LogsHeader"
+    LogsHeader.Parent = DashScroll
+    LogsHeader.BackgroundTransparency = 1
+    LogsHeader.Size = UDim2.new(1, 0, 0, 25)
+    LogsHeader.Font = Enum.Font.GothamBold
+    LogsHeader.Text = "📋 Activity Logs"
+    LogsHeader.TextColor3 = Color3.fromRGB(200, 200, 200)
+    LogsHeader.TextSize = 13
+    LogsHeader.TextXAlignment = Enum.TextXAlignment.Left
     
-    local LogCorner = Instance.new("UICorner")
-    LogCorner.CornerRadius = UDim.new(0, 10)
-    LogCorner.Parent = LogFrame
+    local LogsContainer = Instance.new("Frame")
+    LogsContainer.Name = "LogsContainer"
+    LogsContainer.Parent = DashScroll
+    LogsContainer.BackgroundColor3 = Color3.fromRGB(30, 30, 45)
+    LogsContainer.BorderSizePixel = 0
+    LogsContainer.Size = UDim2.new(1, 0, 0, 200)
     
-    local LogList = Instance.new("UIListLayout")
-    LogList.Parent = LogFrame
-    LogList.SortOrder = Enum.SortOrder.LayoutOrder
-    LogList.Padding = UDim.new(0, 5)
+    local LogsCorner = Instance.new("UICorner")
+    LogsCorner.CornerRadius = UDim.new(0, 8)
+    LogsCorner.Parent = LogsContainer
     
-    local LogPadding = Instance.new("UIPadding")
-    LogPadding.Parent = LogFrame
-    LogPadding.PaddingTop = UDim.new(0, 10)
-    LogPadding.PaddingBottom = UDim.new(0, 10)
-    LogPadding.PaddingLeft = UDim.new(0, 10)
-    LogPadding.PaddingRight = UDim.new(0, 10)
+    local LogsScroll = Instance.new("ScrollingFrame")
+    LogsScroll.Name = "LogsScroll"
+    LogsScroll.Parent = LogsContainer
+    LogsScroll.BackgroundTransparency = 1
+    LogsScroll.Size = UDim2.new(1, 0, 1, 0)
+    LogsScroll.ScrollBarThickness = 4
+    LogsScroll.ScrollBarImageColor3 = Color3.fromRGB(120, 100, 255)
+    LogsScroll.CanvasSize = UDim2.new(0, 0, 0, 0)
+    LogsScroll.AutomaticCanvasSize = Enum.AutomaticSize.Y
     
-    -- Settings Panel
-    local SettingsPanel = Instance.new("Frame")
-    SettingsPanel.Name = "SettingsPanel"
-    SettingsPanel.Parent = MainFrame
-    SettingsPanel.BackgroundColor3 = Color3.fromRGB(25, 20, 40)
-    SettingsPanel.BorderSizePixel = 0
-    SettingsPanel.Position = UDim2.new(0, 10, 0, 70)
-    SettingsPanel.Size = UDim2.new(1, -20, 1, -80)
-    SettingsPanel.Visible = false
+    local LogsLayout = Instance.new("UIListLayout")
+    LogsLayout.Parent = LogsScroll
+    LogsLayout.SortOrder = Enum.SortOrder.LayoutOrder
+    LogsLayout.Padding = UDim.new(0, 5)
     
-    local SettingsPanelCorner = Instance.new("UICorner")
-    SettingsPanelCorner.CornerRadius = UDim.new(0, 10)
-    SettingsPanelCorner.Parent = SettingsPanel
+    local LogsPadding = Instance.new("UIPadding")
+    LogsPadding.Parent = LogsScroll
+    LogsPadding.PaddingTop = UDim.new(0, 10)
+    LogsPadding.PaddingBottom = UDim.new(0, 10)
+    LogsPadding.PaddingLeft = UDim.new(0, 10)
+    LogsPadding.PaddingRight = UDim.new(0, 10)
     
-    -- Settings Header with Back Button
-    local SettingsHeader = Instance.new("Frame")
-    SettingsHeader.Name = "SettingsHeader"
-    SettingsHeader.Parent = SettingsPanel
-    SettingsHeader.BackgroundColor3 = Color3.fromRGB(35, 30, 50)
-    SettingsHeader.BorderSizePixel = 0
-    SettingsHeader.Size = UDim2.new(1, 0, 0, 45)
-    
-    local SettingsHeaderCorner = Instance.new("UICorner")
-    SettingsHeaderCorner.CornerRadius = UDim.new(0, 10)
-    SettingsHeaderCorner.Parent = SettingsHeader
-    
-    local BackButtonTop = Instance.new("TextButton")
-    BackButtonTop.Name = "BackButtonTop"
-    BackButtonTop.Parent = SettingsHeader
-    BackButtonTop.BackgroundColor3 = Color3.fromRGB(100, 100, 100)
-    BackButtonTop.Position = UDim2.new(0, 10, 0.5, -15)
-    BackButtonTop.Size = UDim2.new(0, 60, 0, 30)
-    BackButtonTop.Font = Enum.Font.GothamBold
-    BackButtonTop.Text = "← Back"
-    BackButtonTop.TextColor3 = Color3.fromRGB(255, 255, 255)
-    BackButtonTop.TextSize = 12
-    
-    local BackButtonTopCorner = Instance.new("UICorner")
-    BackButtonTopCorner.CornerRadius = UDim.new(0, 8)
-    BackButtonTopCorner.Parent = BackButtonTop
-    
-    local SettingsTitle = Instance.new("TextLabel")
-    SettingsTitle.Name = "SettingsTitle"
-    SettingsTitle.Parent = SettingsHeader
-    SettingsTitle.BackgroundTransparency = 1
-    SettingsTitle.Position = UDim2.new(0, 80, 0, 0)
-    SettingsTitle.Size = UDim2.new(1, -90, 1, 0)
-    SettingsTitle.Font = Enum.Font.GothamBold
-    SettingsTitle.Text = "⚙️ Settings"
-    SettingsTitle.TextColor3 = Color3.fromRGB(255, 255, 255)
-    SettingsTitle.TextSize = 18
-    SettingsTitle.TextXAlignment = Enum.TextXAlignment.Left
-    
-    BackButtonTop.MouseButton1Click:Connect(function()
-        SettingsPanel.Visible = false
-        Content.Visible = true
-    end)
+    -- Settings Tab
+    local SettingsTab = Instance.new("Frame")
+    SettingsTab.Name = "SettingsTab"
+    SettingsTab.Parent = ContentFrame
+    SettingsTab.BackgroundTransparency = 1
+    SettingsTab.Position = UDim2.new(0, 0, 0, 45)
+    SettingsTab.Size = UDim2.new(1, 0, 1, -45)
+    SettingsTab.Visible = false
     
     local SettingsScroll = Instance.new("ScrollingFrame")
-    SettingsScroll.Parent = SettingsPanel
+    SettingsScroll.Parent = SettingsTab
     SettingsScroll.BackgroundTransparency = 1
-    SettingsScroll.Position = UDim2.new(0, 0, 0, 50)
-    SettingsScroll.Size = UDim2.new(1, 0, 1, -50)
-    SettingsScroll.ScrollBarThickness = 6
-    SettingsScroll.CanvasSize = UDim2.new(0, 0, 0, 530) -- Increased for extra toggle
+    SettingsScroll.BorderSizePixel = 0
+    SettingsScroll.Size = UDim2.new(1, 0, 1, 0)
+    SettingsScroll.ScrollBarThickness = 4
+    SettingsScroll.ScrollBarImageColor3 = Color3.fromRGB(120, 100, 255)
+    SettingsScroll.CanvasSize = UDim2.new(0, 0, 0, 0)
+    SettingsScroll.AutomaticCanvasSize = Enum.AutomaticSize.Y
     
-    local SettingsList = Instance.new("UIListLayout")
-    SettingsList.Parent = SettingsScroll
-    SettingsList.SortOrder = Enum.SortOrder.LayoutOrder
-    SettingsList.Padding = UDim.new(0, 15)
+    local SettingsLayout = Instance.new("UIListLayout")
+    SettingsLayout.Parent = SettingsScroll
+    SettingsLayout.SortOrder = Enum.SortOrder.LayoutOrder
+    SettingsLayout.Padding = UDim.new(0, 10)
     
     local SettingsPadding = Instance.new("UIPadding")
     SettingsPadding.Parent = SettingsScroll
@@ -591,14 +622,14 @@ local function createGUI()
     SettingsPadding.PaddingLeft = UDim.new(0, 15)
     SettingsPadding.PaddingRight = UDim.new(0, 15)
     
-    -- Helper function to create settings with auto-save
-    local function createSetting(name, type, defaultValue, description)
+    -- Helper function to create settings
+    local function createSetting(name, type, description, defaultValue)
         local Setting = Instance.new("Frame")
         Setting.Name = name
         Setting.Parent = SettingsScroll
-        Setting.BackgroundColor3 = Color3.fromRGB(35, 30, 50)
+        Setting.BackgroundColor3 = Color3.fromRGB(30, 30, 45)
         Setting.BorderSizePixel = 0
-        Setting.Size = UDim2.new(1, -30, 0, 80)
+        Setting.Size = UDim2.new(1, 0, 0, 75)
         
         local SettingCorner = Instance.new("UICorner")
         SettingCorner.CornerRadius = UDim.new(0, 8)
@@ -607,43 +638,49 @@ local function createGUI()
         local NameLabel = Instance.new("TextLabel")
         NameLabel.Parent = Setting
         NameLabel.BackgroundTransparency = 1
-        NameLabel.Position = UDim2.new(0, 15, 0, 10)
-        NameLabel.Size = UDim2.new(1, -30, 0, 20)
+        NameLabel.Position = UDim2.new(0, 12, 0, 8)
+        NameLabel.Size = UDim2.new(1, -24, 0, 18)
         NameLabel.Font = Enum.Font.GothamBold
         NameLabel.Text = name
         NameLabel.TextColor3 = Color3.fromRGB(255, 255, 255)
-        NameLabel.TextSize = 14
+        NameLabel.TextSize = 13
         NameLabel.TextXAlignment = Enum.TextXAlignment.Left
         
         local DescLabel = Instance.new("TextLabel")
         DescLabel.Parent = Setting
         DescLabel.BackgroundTransparency = 1
-        DescLabel.Position = UDim2.new(0, 15, 0, 30)
-        DescLabel.Size = UDim2.new(1, -30, 0, 15)
+        DescLabel.Position = UDim2.new(0, 12, 0, 28)
+        DescLabel.Size = UDim2.new(1, -24, 0, 14)
         DescLabel.Font = Enum.Font.Gotham
         DescLabel.Text = description
-        DescLabel.TextColor3 = Color3.fromRGB(150, 150, 150)
-        DescLabel.TextSize = 11
+        DescLabel.TextColor3 = Color3.fromRGB(130, 130, 130)
+        DescLabel.TextSize = 10
         DescLabel.TextXAlignment = Enum.TextXAlignment.Left
+        DescLabel.TextWrapped = true
         
         if type == "text" then
             local TextBox = Instance.new("TextBox")
             TextBox.Parent = Setting
-            TextBox.BackgroundColor3 = Color3.fromRGB(20, 15, 35)
-            TextBox.Position = UDim2.new(0, 15, 0, 50)
-            TextBox.Size = UDim2.new(1, -30, 0, 25)
+            TextBox.BackgroundColor3 = Color3.fromRGB(20, 20, 35)
+            TextBox.Position = UDim2.new(0, 12, 0, 45)
+            TextBox.Size = UDim2.new(1, -24, 0, 25)
             TextBox.Font = Enum.Font.Gotham
             TextBox.PlaceholderText = defaultValue
             TextBox.Text = defaultValue
             TextBox.TextColor3 = Color3.fromRGB(255, 255, 255)
-            TextBox.TextSize = 12
+            TextBox.TextSize = 11
             TextBox.ClearTextOnFocus = false
+            TextBox.TextXAlignment = Enum.TextXAlignment.Left
             
             local TextBoxCorner = Instance.new("UICorner")
-            TextBoxCorner.CornerRadius = UDim.new(0, 6)
+            TextBoxCorner.CornerRadius = UDim.new(0, 5)
             TextBoxCorner.Parent = TextBox
             
-            -- Auto-save on focus lost
+            local TextBoxPadding = Instance.new("UIPadding")
+            TextBoxPadding.Parent = TextBox
+            TextBoxPadding.PaddingLeft = UDim.new(0, 8)
+            TextBoxPadding.PaddingRight = UDim.new(0, 8)
+            
             TextBox.FocusLost:Connect(function()
                 if name == "Discord Webhook" then
                     Config.webhookUrl = TextBox.Text
@@ -654,52 +691,62 @@ local function createGUI()
             end)
             
             return TextBox
+            
         elseif type == "number" then
             local TextBox = Instance.new("TextBox")
             TextBox.Parent = Setting
-            TextBox.BackgroundColor3 = Color3.fromRGB(20, 15, 35)
-            TextBox.Position = UDim2.new(0, 15, 0, 50)
-            TextBox.Size = UDim2.new(1, -30, 0, 25)
+            TextBox.BackgroundColor3 = Color3.fromRGB(20, 20, 35)
+            TextBox.Position = UDim2.new(0, 12, 0, 45)
+            TextBox.Size = UDim2.new(1, -24, 0, 25)
             TextBox.Font = Enum.Font.Gotham
             TextBox.PlaceholderText = tostring(defaultValue)
             TextBox.Text = tostring(defaultValue)
             TextBox.TextColor3 = Color3.fromRGB(255, 255, 255)
-            TextBox.TextSize = 12
+            TextBox.TextSize = 11
             TextBox.ClearTextOnFocus = false
+            TextBox.TextXAlignment = Enum.TextXAlignment.Left
             
             local TextBoxCorner = Instance.new("UICorner")
-            TextBoxCorner.CornerRadius = UDim.new(0, 6)
+            TextBoxCorner.CornerRadius = UDim.new(0, 5)
             TextBoxCorner.Parent = TextBox
             
-            -- Auto-save on focus lost
+            local TextBoxPadding = Instance.new("UIPadding")
+            TextBoxPadding.Parent = TextBox
+            TextBoxPadding.PaddingLeft = UDim.new(0, 8)
+            TextBoxPadding.PaddingRight = UDim.new(0, 8)
+            
             TextBox.FocusLost:Connect(function()
-                Config.maxTimeInServer = tonumber(TextBox.Text) or 0
+                if name == "Max Time (minutes)" then
+                    Config.maxTimeInServer = tonumber(TextBox.Text) or 0
+                end
                 saveConfig()
             end)
             
             return TextBox
+            
         elseif type == "toggle" then
             local Toggle = Instance.new("TextButton")
             Toggle.Parent = Setting
-            Toggle.BackgroundColor3 = defaultValue and Color3.fromRGB(100, 200, 100) or Color3.fromRGB(100, 100, 100)
-            Toggle.Position = UDim2.new(1, -70, 0, 50)
+            Toggle.AnchorPoint = Vector2.new(1, 0)
+            Toggle.BackgroundColor3 = defaultValue and Color3.fromRGB(100, 200, 100) or Color3.fromRGB(60, 60, 70)
+            Toggle.Position = UDim2.new(1, -12, 0, 45)
             Toggle.Size = UDim2.new(0, 50, 0, 25)
             Toggle.Font = Enum.Font.GothamBold
             Toggle.Text = defaultValue and "ON" or "OFF"
             Toggle.TextColor3 = Color3.fromRGB(255, 255, 255)
-            Toggle.TextSize = 12
+            Toggle.TextSize = 11
+            Toggle.AutoButtonColor = false
             
             local ToggleCorner = Instance.new("UICorner")
-            ToggleCorner.CornerRadius = UDim.new(0, 6)
+            ToggleCorner.CornerRadius = UDim.new(0, 5)
             ToggleCorner.Parent = Toggle
             
             local toggleState = defaultValue
             Toggle.MouseButton1Click:Connect(function()
                 toggleState = not toggleState
                 Toggle.Text = toggleState and "ON" or "OFF"
-                Toggle.BackgroundColor3 = toggleState and Color3.fromRGB(100, 200, 100) or Color3.fromRGB(100, 100, 100)
+                Toggle.BackgroundColor3 = toggleState and Color3.fromRGB(100, 200, 100) or Color3.fromRGB(60, 60, 70)
                 
-                -- Auto-save when toggled
                 if name == "Auto Reconnect" then
                     Config.autoReconnect = toggleState
                 elseif name == "Verbose Logging" then
@@ -715,55 +762,99 @@ local function createGUI()
     end
     
     -- Create settings
-    local WebhookBox = createSetting("Discord Webhook", "text", Config.webhookUrl, "Send logs to Discord (auto-saves)")
-    local PlaceIDBox = createSetting("Place ID", "text", Config.placeId, "Game to reconnect to (auto-saves)")
-    local AutoReconnectToggle = createSetting("Auto Reconnect", "toggle", Config.autoReconnect, "Enable/disable auto-reconnect (auto-saves)")
-    local EnableMaxTimeToggle = createSetting("Enable Max Time", "toggle", Config.enableMaxTime, "Enable auto-reconnect timer (auto-saves)")
-    local MaxTimeBox = createSetting("Max Time (minutes)", "number", Config.maxTimeInServer, "Minutes before auto-reconnect (auto-saves)")
-    local VerboseLoggingToggle = createSetting("Verbose Logging", "toggle", Config.verboseLogging, "Show detailed connection logs (auto-saves)")
+    createSetting("Discord Webhook", "text", "Send logs to Discord (optional)", Config.webhookUrl)
+    createSetting("Place ID", "text", "Game to reconnect to", Config.placeId)
+    createSetting("Auto Reconnect", "toggle", "Automatically reconnect on disconnect", Config.autoReconnect)
+    createSetting("Enable Max Time", "toggle", "Enable time-based reconnection", Config.enableMaxTime)
+    createSetting("Max Time (minutes)", "number", "Minutes before auto-reconnect (0 = unlimited)", Config.maxTimeInServer)
+    createSetting("Verbose Logging", "toggle", "Show detailed connection logs", Config.verboseLogging)
     
-    -- Settings Button Click
+    -- Tab buttons
+    local function createTabButton(text, targetTab)
+        local TabButton = Instance.new("TextButton")
+        TabButton.Parent = TabBar
+        TabButton.BackgroundColor3 = Color3.fromRGB(40, 40, 60)
+        TabButton.Size = UDim2.new(0, 100, 0, 30)
+        TabButton.Font = Enum.Font.GothamBold
+        TabButton.Text = text
+        TabButton.TextColor3 = Color3.fromRGB(200, 200, 200)
+        TabButton.TextSize = 12
+        TabButton.AutoButtonColor = false
+        
+        local TabCorner = Instance.new("UICorner")
+        TabCorner.CornerRadius = UDim.new(0, 6)
+        TabCorner.Parent = TabButton
+        
+        TabButton.MouseButton1Click:Connect(function()
+            DashboardTab.Visible = (targetTab == "dashboard")
+            SettingsTab.Visible = (targetTab == "settings")
+            
+            -- Update button colors
+            for _, btn in ipairs(TabBar:GetChildren()) do
+                if btn:IsA("TextButton") then
+                    if btn == TabButton then
+                        btn.BackgroundColor3 = Color3.fromRGB(120, 100, 255)
+                        btn.TextColor3 = Color3.fromRGB(255, 255, 255)
+                    else
+                        btn.BackgroundColor3 = Color3.fromRGB(40, 40, 60)
+                        btn.TextColor3 = Color3.fromRGB(200, 200, 200)
+                    end
+                end
+            end
+        end)
+        
+        return TabButton
+    end
+    
+    local DashTab = createTabButton("📊 Dashboard", "dashboard")
+    local SetTab = createTabButton("⚙️ Settings", "settings")
+    
+    -- Set initial active tab
+    DashTab.BackgroundColor3 = Color3.fromRGB(120, 100, 255)
+    DashTab.TextColor3 = Color3.fromRGB(255, 255, 255)
+    
+    -- Also connect settings button
     SettingsButton.MouseButton1Click:Connect(function()
-        SettingsPanel.Visible = true
-        Content.Visible = false
+        DashboardTab.Visible = false
+        SettingsTab.Visible = true
+        SetTab.BackgroundColor3 = Color3.fromRGB(120, 100, 255)
+        SetTab.TextColor3 = Color3.fromRGB(255, 255, 255)
+        DashTab.BackgroundColor3 = Color3.fromRGB(40, 40, 60)
+        DashTab.TextColor3 = Color3.fromRGB(200, 200, 200)
     end)
     
-    -- ========================================
-    -- UPDATE FUNCTIONS
-    -- ========================================
+    -- Update functions
     local function updateLogs()
-        -- Clear old logs
-        for _, child in ipairs(LogFrame:GetChildren()) do
+        for _, child in ipairs(LogsScroll:GetChildren()) do
             if child:IsA("Frame") then
                 child:Destroy()
             end
         end
         
-        -- Add new logs
         for i, log in ipairs(Logs) do
             local LogEntry = Instance.new("Frame")
             LogEntry.Name = "LogEntry" .. i
-            LogEntry.Parent = LogFrame
-            LogEntry.BackgroundColor3 = Color3.fromRGB(40, 35, 55)
+            LogEntry.Parent = LogsScroll
+            LogEntry.BackgroundColor3 = Color3.fromRGB(35, 35, 50)
             LogEntry.BorderSizePixel = 0
-            LogEntry.Size = UDim2.new(1, -20, 0, 50)
+            LogEntry.Size = UDim2.new(1, 0, 0, 45)
             
-            local LogEntryCorner = Instance.new("UICorner")
-            LogEntryCorner.CornerRadius = UDim.new(0, 8)
-            LogEntryCorner.Parent = LogEntry
+            local LogCorner = Instance.new("UICorner")
+            LogCorner.CornerRadius = UDim.new(0, 6)
+            LogCorner.Parent = LogEntry
             
             local Icon = Instance.new("TextLabel")
             Icon.Parent = LogEntry
             Icon.BackgroundTransparency = 1
-            Icon.Position = UDim2.new(0, 10, 0, 0)
+            Icon.Position = UDim2.new(0, 8, 0, 0)
             Icon.Size = UDim2.new(0, 30, 1, 0)
             Icon.Font = Enum.Font.GothamBold
-            Icon.TextSize = 18
+            Icon.TextSize = 16
             Icon.TextXAlignment = Enum.TextXAlignment.Center
             
             if log.type == "success" then
                 Icon.Text = "✅"
-                Icon.TextColor3 = Color3.fromRGB(100, 255, 150)
+                Icon.TextColor3 = Color3.fromRGB(100, 220, 150)
             elseif log.type == "warning" then
                 Icon.Text = "⚠️"
                 Icon.TextColor3 = Color3.fromRGB(255, 200, 100)
@@ -778,29 +869,26 @@ local function createGUI()
             local Message = Instance.new("TextLabel")
             Message.Parent = LogEntry
             Message.BackgroundTransparency = 1
-            Message.Position = UDim2.new(0, 45, 0, 5)
-            Message.Size = UDim2.new(1, -55, 0, 25)
+            Message.Position = UDim2.new(0, 38, 0, 5)
+            Message.Size = UDim2.new(1, -75, 0, 20)
             Message.Font = Enum.Font.Gotham
             Message.Text = log.message
             Message.TextColor3 = Color3.fromRGB(220, 220, 220)
-            Message.TextSize = 13
+            Message.TextSize = 11
             Message.TextXAlignment = Enum.TextXAlignment.Left
-            Message.TextWrapped = true
+            Message.TextTruncate = Enum.TextTruncate.AtEnd
             
             local Time = Instance.new("TextLabel")
             Time.Parent = LogEntry
             Time.BackgroundTransparency = 1
-            Time.Position = UDim2.new(0, 45, 0, 28)
-            Time.Size = UDim2.new(1, -55, 0, 17)
+            Time.Position = UDim2.new(0, 38, 0, 25)
+            Time.Size = UDim2.new(1, -45, 0, 15)
             Time.Font = Enum.Font.Gotham
             Time.Text = os.date("%H:%M:%S", log.time)
-            Time.TextColor3 = Color3.fromRGB(120, 120, 120)
-            Time.TextSize = 11
+            Time.TextColor3 = Color3.fromRGB(100, 100, 100)
+            Time.TextSize = 9
             Time.TextXAlignment = Enum.TextXAlignment.Left
         end
-        
-        -- Update canvas size
-        LogFrame.CanvasSize = UDim2.new(0, 0, 0, #Logs * 55 + 20)
     end
     
     local function updateStats()
@@ -808,20 +896,19 @@ local function createGUI()
         ReconnectsValue.Text = tostring(Stats.totalReconnects)
         StatusValue.Text = Stats.status
         
-        -- Update time color based on progress (only if max time is enabled)
         if Config.enableMaxTime and Config.maxTimeInServer > 0 then
             local percentage = (Stats.timeInServer / (Config.maxTimeInServer * 60)) * 100
+            
             if percentage >= 90 then
                 TimeValue.TextColor3 = Color3.fromRGB(255, 100, 100)
             elseif percentage >= 70 then
                 TimeValue.TextColor3 = Color3.fromRGB(255, 200, 100)
             else
-                TimeValue.TextColor3 = Color3.fromRGB(100, 255, 150)
+                TimeValue.TextColor3 = Color3.fromRGB(100, 220, 150)
             end
             
-            -- Update progress bar
             ProgressBar.Size = UDim2.new(math.min(1, percentage / 100), 0, 1, 0)
-            ProgressText.Text = string.format("%.1f%% - %d minutes remaining", 
+            ProgressText.Text = string.format("%.1f%% - %d min remaining", 
                 percentage, 
                 math.max(0, Config.maxTimeInServer - math.floor(Stats.timeInServer / 60))
             )
@@ -831,9 +918,8 @@ local function createGUI()
             ProgressText.Text = Config.enableMaxTime and "Set max time in settings" or "Max time disabled"
         end
         
-        -- Update status color
         if Stats.status == "Active" then
-            StatusValue.TextColor3 = Color3.fromRGB(100, 255, 150)
+            StatusValue.TextColor3 = Color3.fromRGB(100, 220, 150)
         elseif Stats.status == "Reconnecting" then
             StatusValue.TextColor3 = Color3.fromRGB(255, 200, 100)
         else
@@ -841,9 +927,7 @@ local function createGUI()
         end
     end
     
-    -- ========================================
-    -- MAIN UPDATE LOOP
-    -- ========================================
+    -- Main update loop
     task.spawn(function()
         while true do
             updateStats()
@@ -883,7 +967,6 @@ task.spawn(function()
         task.wait(1)
         Stats.timeInServer = Stats.timeInServer + 1
         
-        -- Auto-reconnect based on max time (only if enabled)
         if Config.autoReconnect and Config.enableMaxTime and Config.maxTimeInServer > 0 then
             if Stats.timeInServer >= Config.maxTimeInServer * 60 then
                 reconnect("Max time limit reached")
@@ -902,7 +985,6 @@ RunService.Heartbeat:Connect(function()
     local currentTime = tick()
     local timeSinceLastBeat = currentTime - lastHeartbeat
     
-    -- If no heartbeat for 5+ seconds, connection is dying
     if timeSinceLastBeat > 5 and not connectionWarningIssued then
         if Config.verboseLogging then
             addLog("warning", string.format("Connection unstable! No heartbeat for %.1fs", timeSinceLastBeat))
@@ -911,7 +993,6 @@ RunService.Heartbeat:Connect(function()
         connectionWarningIssued = true
     end
     
-    -- If no heartbeat for 10+ seconds, emergency reconnect
     if timeSinceLastBeat > 10 and Config.autoReconnect then
         addLog("error", "Critical connection failure!")
         reconnect("Connection timeout")
@@ -943,38 +1024,24 @@ print("========================================")
 print("AUTO-RECONNECT DASHBOARD STARTING...")
 print("========================================")
 
--- Try to load config (might fail, that's okay)
-pcall(function()
-    loadConfig()
-end)
+pcall(loadConfig)
+pcall(function() addLog("success", "Auto-Reconnect Dashboard initializing...") end)
+pcall(function() sendWebhook("✅ Auto-Reconnect Dashboard loaded!", 3066993) end)
 
--- Send initial logs
-pcall(function()
-    addLog("success", "Auto-Reconnect Dashboard initializing...")
-end)
-
-pcall(function()
-    sendWebhook("✅ Auto-Reconnect Dashboard loaded!", 3066993)
-end)
-
--- Wait for character to load
 if not LocalPlayer.Character then
     LocalPlayer.CharacterAdded:Wait()
 end
 
-task.wait(2) -- Wait a bit for game to fully load
+task.wait(2)
 
--- Create the GUI
-local success, err = pcall(function()
-    gui = createGUI()
-end)
+local success, err = pcall(createGUI)
 
 if not success then
     warn("Failed to create GUI:", err)
     return
 end
 
-addLog("success", "Dashboard ready! Press the minimize button to hide.")
+addLog("success", "Dashboard ready! Click minimize to hide.")
 addLog("info", "Place ID: " .. Config.placeId)
 addLog("info", "Max time: " .. (Config.maxTimeInServer == 0 and "Unlimited" or Config.maxTimeInServer .. " minutes"))
 addLog("info", "Auto-reconnect: " .. (Config.autoReconnect and "Enabled" or "Disabled"))
