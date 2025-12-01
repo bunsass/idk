@@ -18,7 +18,7 @@ local LocalPlayer = Players.LocalPlayer
 -- ========================================
 local Config = {
     webhookUrl = "https://discord.com/api/webhooks/1434305865296379954/L2Sm8qbftl0iSU9H-2aDucuvMzd0dRaQP4eikKTGoTgR1KgS-c7ZgX6_GINjipBN3_Nv",  -- YOUR DISCORD WEBHOOK URL
-    placeId = "16146832113",                -- GAME PLACE ID TO RECONNECT TO
+    placeId = "79189799490564",                -- GAME PLACE ID TO RECONNECT TO
     maxTimeInServer = 60,                   -- MINUTES BEFORE AUTO-RECONNECT (0 = UNLIMITED)
     autoReconnect = true,                   -- AUTO RECONNECT ON DISCONNECT
     enableMaxTime = false,                  -- ENABLE TIME-BASED RECONNECTION
