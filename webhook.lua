@@ -6,17 +6,15 @@ local player = Players.LocalPlayer
 local WEBHOOK      = "https://discord.com/api/webhooks/1491999512506531850/9Bg3zLKyTkIBB7xgJCTekFluozbvUfH4eHUoBtCIxsXL4jlsgI44HCa-Mb3HUr1iZCzt"
 local INTERVAL_MIN = 30
 local WAIT_TIMEOUT = 30
+local EMBED_COLOR  = 12564674 -- #B027F5 in decimal
 
 local CATEGORIES = {
     { label = "Chests",    keys = { "Common Chest", "Rare Chest", "Epic Chest", "Legendary Chest", "Mythical Chest", "Boss Chest" } },
     { label = "Rerolls",   keys = { "Trait Reroll", "Haki Color Reroll", "Clan Reroll", "Race Reroll", "Stat Reroll" } },
     { label = "Keys",      keys = { "Tower Key", "Rush Key", "Dungeon Key", "Boss Key", "Limitless Key", "Malevolent Key" } },
     { label = "Materials", keys = { "Wood", "Iron", "Obsidian", "Mythril", "Adamantite", "Dust", "Stone" } },
-    { label = "Gears",     keys = nil },
     { label = "Others",    keys = nil },
 }
-
-local GEAR_PATTERNS = { "Helmet", "Gloves", "Body", "Boots", "Chest Plate", "Leggings" }
 
 local nameToCategory = {}
 for _, cat in ipairs(CATEGORIES) do
@@ -28,15 +26,7 @@ for _, cat in ipairs(CATEGORIES) do
 end
 
 local function getCategory(name)
-    if nameToCategory[name] then
-        return nameToCategory[name]
-    end
-    for _, pattern in ipairs(GEAR_PATTERNS) do
-        if name:find(pattern) then
-            return "Gears"
-        end
-    end
-    return "Others"
+    return nameToCategory[name] or "Others"
 end
 
 local requestFunc = syn and syn.request or http_request or request
@@ -94,7 +84,7 @@ local function diffSnapshots(prev, curr)
     return gained
 end
 
-local function buildMessage(diffList, sessionStart)
+local function buildDescription(diffList, sessionStart)
     if #diffList == 0 then return nil end
 
     local groups = {}
@@ -136,34 +126,21 @@ local function buildMessage(diffList, sessionStart)
     return table.concat(lines, "\n")
 end
 
-local function sendToDiscord(message)
+local function sendToDiscord(description)
     if not requestFunc then return end
 
-    local chunks = {}
-    if #message <= 2000 then
-        chunks = { message }
-    else
-        local chunk = ""
-        for line in (message .. "\n"):gmatch("([^\n]*)\n") do
-            if #chunk + #line + 1 > 1990 then
-                table.insert(chunks, chunk)
-                chunk = line
-            else
-                chunk = chunk == "" and line or (chunk .. "\n" .. line)
-            end
-        end
-        if chunk ~= "" then table.insert(chunks, chunk) end
-    end
+    local bodyJson = string.format(
+        '{"embeds":[{"description":"%s","color":%d}]}',
+        escapeJson(description),
+        EMBED_COLOR
+    )
 
-    for _, chunk in ipairs(chunks) do
-        pcall(requestFunc, {
-            Url     = WEBHOOK,
-            Method  = "POST",
-            Headers = { ["Content-Type"] = "application/json" },
-            Body    = '{"content":"' .. escapeJson(chunk) .. '"}'
-        })
-        wait(1)
-    end
+    pcall(requestFunc, {
+        Url     = WEBHOOK,
+        Method  = "POST",
+        Headers = { ["Content-Type"] = "application/json" },
+        Body    = bodyJson
+    })
 end
 
 local function captureSnapshot(updateInventory)
@@ -208,8 +185,8 @@ local function main()
                 prevSnapshot = snap
             else
                 local diff = diffSnapshots(prevSnapshot, snap)
-                local msg = buildMessage(diff, sessionStart)
-                if msg then sendToDiscord(msg) end
+                local desc = buildDescription(diff, sessionStart)
+                if desc then sendToDiscord(desc) end
                 prevSnapshot = snap
             end
         end
