@@ -9,7 +9,7 @@ local WAIT_TIMEOUT = 30
 local EMBED_COLOR  = 12564674 -- #B027F5 in decimal
 
 local CATEGORIES = {
-    { label = "Chests",    keys = { "Common Chest", "Rare Chest", "Epic Chest", "Legendary Chest", "Mythical Chest", "Boss Chest" } },
+    { label = "Chests",    keys = { "Common Chest", "Rare Chest", "Epic Chest", "Legendary Chest", "Mythical Chest", "Aura Crate", "Cosmetic Crate"  } },
     { label = "Rerolls",   keys = { "Trait Reroll", "Haki Color Reroll", "Clan Reroll", "Race Reroll", "Stat Reroll" } },
     { label = "Keys",      keys = { "Tower Key", "Rush Key", "Dungeon Key", "Boss Key", "Limitless Key", "Malevolent Key" } },
     { label = "Materials", keys = { "Wood", "Iron", "Obsidian", "Mythril", "Adamantite", "Dust", "Stone" } },
