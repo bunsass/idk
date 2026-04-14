@@ -1,54 +1,13 @@
 local TeleportService = game:GetService("TeleportService")
 
-local REJOIN_INTERVAL = 1860 -- seconds
-local WEBHOOK_URL = "https://discord.com/api/webhooks/1488987999734599731/Pm1qIleWT2Kut1Z6VBplCyfH_4HKIg58n9CPdkjbyIt50VMrLyYjyqUwzmp_ATsVXl-k"
-local startTime = os.time()
+local REJOIN_INTERVAL = 1860 -- 1.5 hours in seconds
 
-local function formatTime(seconds)
-    local hours = math.floor(seconds / 3600)
-    local minutes = math.floor((seconds % 3600) / 60)
-    local secs = seconds % 60
-    return string.format("%02dh %02dm %02ds", hours, minutes, secs)
-end
+print("[Auto-Rejoin] Script started! Will rejoin every 1.5 hours.")
 
-local function sendWebhook()
-    local timeOnServer = os.time() - startTime
-
-    local data = {
-        embeds = {{
-            title = "🔄 Auto-Rejoin Triggered",
-            description = "The script is rejoining the server.",
-            color = 5814783,
-            fields = {
-                { name = "Place ID", value = tostring(game.PlaceId), inline = true },
-                { name = "Player", value = tostring(game.Players.LocalPlayer.Name), inline = true },
-                { name = "⏱️ Time on Server", value = formatTime(timeOnServer), inline = false }
-            },
-            footer = { text = "Auto-Rejoin System" }
-        }}
-    }
-
-    local success, err = pcall(function()
-        request({
-            Url = WEBHOOK_URL,
-            Method = "POST",
-            Headers = { ["Content-Type"] = "application/json" },
-            Body = game:GetService("HttpService"):JSONEncode(data)
-        })
-    end)
-
-    if success then
-        print("[Auto-Rejoin] Webhook sent!")
-    else
-        warn("[Auto-Rejoin] Webhook failed: " .. tostring(err))
+task.spawn(function()
+    while true do
+        task.wait(REJOIN_INTERVAL)
+        print("[Auto-Rejoin] Rejoining server...")
+        TeleportService:Teleport(game.PlaceId)
     end
-end
-
-print("[Auto-Rejoin] Script started!")
-
-task.delay(REJOIN_INTERVAL, function()
-    print("[Auto-Rejoin] Rejoining server...")
-    sendWebhook()
-    task.wait(2)
-    TeleportService:Teleport(game.PlaceId)
 end)
