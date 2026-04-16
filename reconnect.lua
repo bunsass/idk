@@ -1,6 +1,6 @@
 local TeleportService = game:GetService("TeleportService")
 
-local REJOIN_INTERVAL = 3660 -- seconds
+local REJOIN_INTERVAL = 5460 -- seconds
 local WEBHOOK_URL = "https://discord.com/api/webhooks/1488987999734599731/Pm1qIleWT2Kut1Z6VBplCyfH_4HKIg58n9CPdkjbyIt50VMrLyYjyqUwzmp_ATsVXl-k"
 local startTime = os.time()
 
