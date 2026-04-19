@@ -4,7 +4,7 @@ local Players = game:GetService("Players")
 local player = Players.LocalPlayer
 
 local WEBHOOK      = "https://discord.com/api/webhooks/1488987999734599731/Pm1qIleWT2Kut1Z6VBplCyfH_4HKIg58n9CPdkjbyIt50VMrLyYjyqUwzmp_ATsVXl-k"
-local INTERVAL_MIN = 1
+local INTERVAL_MIN = 30
 local WAIT_TIMEOUT = 30
 local EMBED_COLOR  = 12564674 -- #B027F5 in decimal
 
