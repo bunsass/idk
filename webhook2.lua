@@ -4,8 +4,8 @@ local Players = game:GetService("Players")
 local player = Players.LocalPlayer
 
 local WEBHOOK      = "https://discord.com/api/webhooks/1488987999734599731/Pm1qIleWT2Kut1Z6VBplCyfH_4HKIg58n9CPdkjbyIt50VMrLyYjyqUwzmp_ATsVXl-k"
-local INTERVAL_MIN = 1  -- Changed from 30 to 1 minute for more frequent checks
-local EMBED_COLOR  = 12564674 -- #B027F5 in decimal
+local INTERVAL_MIN = 30
+local EMBED_COLOR  = 12564674
 
 local CATEGORIES = {
     { label = "Chests",    keys = { "Common Chest", "Rare Chest", "Epic Chest", "Legendary Chest", "Mythical Chest", "Secret Chest", "Aura Crate", "Cosmetic Crate"  } },
@@ -55,7 +55,6 @@ end
 
 local function extractItems(data, out)
     if type(data) == "table" then
-        -- FIX: Check for both direct item format and nested structures
         if data.name and data.quantity then
             out[tostring(data.name)] = tonumber(data.quantity) or 0
         else
@@ -68,15 +67,12 @@ end
 
 local function buildSnapshot(capturedData)
     local snap = {}
-    -- FIX: Handle case where capturedData might be a single table or array of args
     if type(capturedData) == "table" then
-        -- If it's an array of arguments
         if capturedData[1] then
             for _, arg in ipairs(capturedData) do
                 extractItems(arg, snap)
             end
         else
-            -- If it's a single table argument
             extractItems(capturedData, snap)
         end
     end
@@ -87,7 +83,6 @@ local function diffSnapshots(prev, curr)
     local gained = {}
     for name, qty in pairs(curr) do
         local old = prev[name] or 0
-        -- FIX: More robust comparison
         if tonumber(qty) and tonumber(old) then
             if qty > old then
                 table.insert(gained, { name = name, gained = qty - old, total = qty })
@@ -157,7 +152,7 @@ local function sendToDiscord(description)
         Headers = { ["Content-Type"] = "application/json" },
         Body    = bodyJson
     })
-    
+
     if success then
         print("✅ Sent to Discord!")
     else
@@ -165,39 +160,23 @@ local function sendToDiscord(description)
     end
 end
 
--- FIX: Complete rewrite of snapshot capturing
--- Instead of waiting for ONE event, we actively monitor and capture
-local function captureInventorySnapshot(updateInventory)
-    local capturedData = nil
-    local eventFired = false
+local function countItems(snap)
+    local count = 0
+    for _ in pairs(snap) do
+        count = count + 1
+    end
+    return count
+end
 
-    print("⏳ Waiting for UpdateInventory event...")
+local latestSnapshot = nil
 
-    local conn
-    conn = updateInventory.OnClientEvent:Connect(function(...)
-        capturedData = { ... }
-        eventFired = true
-        print("✅ UpdateInventory event captured!")
-        conn:Disconnect()
+local function startListening(updateInventory)
+    updateInventory.OnClientEvent:Connect(function(...)
+        local capturedData = { ... }
+        latestSnapshot = buildSnapshot(capturedData)
+        print("🔄 Inventory updated and cached (" .. countItems(latestSnapshot) .. " item types)")
     end)
-
-    -- Wait up to 30 seconds for an event
-    local waited = 0
-    while not eventFired and waited < 30 do
-        wait(1)
-        waited = waited + 1
-        if waited % 5 == 0 then
-            print("⏳ Still waiting... (" .. waited .. "/30s)")
-        end
-    end
-
-    if not eventFired then
-        print("❌ No UpdateInventory event received after 30 seconds")
-        conn:Disconnect()
-        return nil
-    end
-
-    return buildSnapshot(capturedData)
+    print("✅ Listening for inventory updates continuously...")
 end
 
 local function main()
@@ -222,50 +201,43 @@ local function main()
     print("✅ Found UpdateInventory remote!")
     print("📊 Starting tracker... Keep farming!\n")
 
+    startListening(updateInventory)
+
     local sessionStart = os.time()
     local prevSnapshot = nil
     local checkCount = 0
 
     while true do
         wait(INTERVAL_MIN * 60)
-        
-        checkCount = checkCount + 1
-        print("\n[Check #" .. checkCount .. "] Attempting to capture inventory...")
 
-        local snap = captureInventorySnapshot(updateInventory)
+        checkCount = checkCount + 1
+        print("\n[Check #" .. checkCount .. "] Reading latest inventory snapshot...")
+
+        local snap = latestSnapshot
 
         if snap then
-            print("📦 Snapshot captured with " .. countItems(snap) .. " item types")
-            
+            print("📦 Snapshot found with " .. countItems(snap) .. " item types")
+
             if prevSnapshot == nil then
                 print("📍 First snapshot - saving baseline")
                 prevSnapshot = snap
             else
                 local diff = diffSnapshots(prevSnapshot, snap)
                 local desc = buildDescription(diff, sessionStart)
-                
+
                 if desc then
                     print("🎯 Items gained! Sending to Discord...")
                     sendToDiscord(desc)
                 else
                     print("❌ No item changes detected")
                 end
-                
+
                 prevSnapshot = snap
             end
         else
-            print("⚠️  Failed to capture snapshot - will retry on next interval")
+            print("⚠️ No inventory snapshot received yet - will retry next interval")
         end
     end
-end
-
--- Helper function to count items in snapshot
-function countItems(snap)
-    local count = 0
-    for _ in pairs(snap) do
-        count = count + 1
-    end
-    return count
 end
 
 main()
