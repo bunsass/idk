@@ -3,16 +3,17 @@ local Players = game:GetService("Players")
 
 local player = Players.LocalPlayer
 
-local WEBHOOK      = "https://discord.com/api/webhooks/1488987999734599731/Pm1qIleWT2Kut1Z6VBplCyfH_4HKIg58n9CPdkjbyIt50VMrLyYjyqUwzmp_ATsVXl-k"
-local INTERVAL_MIN = 15
-local EMBED_COLOR  = 12564674
+local WEBHOOK      = "https://discord.com/api/webhooks/1491999512506531850/9Bg3zLKyTkIBB7xgJCTekFluozbvUfH4eHUoBtCIxsXL4jlsgI44HCa-Mb3HUr1iZCzt"
+local INTERVAL_MIN = 30
+local WAIT_TIMEOUT = 30
+local EMBED_COLOR  = 12564674 -- #B027F5 in decimal
 
 local CATEGORIES = {
     { label = "Chests",    keys = { "Common Chest", "Rare Chest", "Epic Chest", "Legendary Chest", "Mythical Chest", "Secret Chest", "Aura Crate", "Cosmetic Crate"  } },
     { label = "Rerolls",   keys = { "Trait Reroll", "Haki Color Reroll", "Clan Reroll", "Race Reroll", "Passive Shard", "Power Shard" } },
     { label = "Keys",      keys = { "Tower Key", "Rush Key", "Dungeon Key", "Boss Key", "Limitless Key", "Malevolent Key" } },
     { label = "Materials", keys = { "Wood", "Iron", "Obsidian", "Mythril", "Adamantite", "Dust", "Stone" } },
-    { label = "Boss Summons", keys = { "Abyss Sigil", "Frost Relic", "Dark Grail", "Calamity Seal", "Upper Seal" } },
+    { label = "Boss Summons", keys = { "Abyss Sigil", "Frost Relic", "Dark Grail", "Calamity Seal", "Upper Seal",  } },
     { label = "Others",    keys = nil },
 }
 
@@ -67,14 +68,8 @@ end
 
 local function buildSnapshot(capturedData)
     local snap = {}
-    if type(capturedData) == "table" then
-        if capturedData[1] then
-            for _, arg in ipairs(capturedData) do
-                extractItems(arg, snap)
-            end
-        else
-            extractItems(capturedData, snap)
-        end
+    for _, arg in ipairs(capturedData) do
+        extractItems(arg, snap)
     end
     return snap
 end
@@ -83,10 +78,8 @@ local function diffSnapshots(prev, curr)
     local gained = {}
     for name, qty in pairs(curr) do
         local old = prev[name] or 0
-        if tonumber(qty) and tonumber(old) then
-            if qty > old then
-                table.insert(gained, { name = name, gained = qty - old, total = qty })
-            end
+        if qty > old then
+            table.insert(gained, { name = name, gained = qty - old, total = qty })
         end
     end
     return gained
@@ -135,10 +128,7 @@ local function buildDescription(diffList, sessionStart)
 end
 
 local function sendToDiscord(description)
-    if not requestFunc then 
-        print("❌ No request function available")
-        return 
-    end
+    if not requestFunc then return end
 
     local bodyJson = string.format(
         '{"embeds":[{"description":"%s","color":%d}]}',
@@ -146,97 +136,63 @@ local function sendToDiscord(description)
         EMBED_COLOR
     )
 
-    local success = pcall(requestFunc, {
+    pcall(requestFunc, {
         Url     = WEBHOOK,
         Method  = "POST",
         Headers = { ["Content-Type"] = "application/json" },
         Body    = bodyJson
     })
-
-    if success then
-        print("✅ Sent to Discord!")
-    else
-        print("❌ Failed to send to Discord")
-    end
 end
 
-local function countItems(snap)
-    local count = 0
-    for _ in pairs(snap) do
-        count = count + 1
-    end
-    return count
-end
+local function captureSnapshot(updateInventory)
+    local capturedData, received = nil, false
 
-local latestSnapshot = nil
-
-local function startListening(updateInventory)
-    updateInventory.OnClientEvent:Connect(function(...)
-        local capturedData = { ... }
-        latestSnapshot = buildSnapshot(capturedData)
-        print("🔄 Inventory updated and cached (" .. countItems(latestSnapshot) .. " item types)")
+    local conn
+    conn = updateInventory.OnClientEvent:Connect(function(...)
+        capturedData = { ... }
+        received = true
+        conn:Disconnect()
     end)
-    print("✅ Listening for inventory updates continuously...")
+
+    local waited = 0
+    while not received and waited < WAIT_TIMEOUT do
+        wait(1)
+        waited = waited + 1
+    end
+
+    if not received then
+        conn:Disconnect()
+        return nil
+    end
+
+    return buildSnapshot(capturedData)
 end
 
 local function main()
-    print("\n╔════════════════════════════════════════════════════════════════╗")
-    print("║        Sailor Piece Tracker - Fixed Version                   ║")
-    print("║                                                                ║")
-    print("║  Tracking inventory changes and sending to Discord             ║")
-    print("╚════════════════════════════════════════════════════════════════╝\n")
-
     local remotes = ReplicatedStorage:WaitForChild("Remotes", 10)
-    if not remotes then 
-        print("❌ Cannot find Remotes folder in ReplicatedStorage")
-        return 
-    end
+    if not remotes then return end
 
     local updateInventory = remotes:FindFirstChild("UpdateInventory")
-    if not updateInventory then 
-        print("❌ Cannot find UpdateInventory remote")
-        return 
-    end
-
-    print("✅ Found UpdateInventory remote!")
-    print("📊 Starting tracker... Keep farming!\n")
-
-    startListening(updateInventory)
+    if not updateInventory then return end
 
     local sessionStart = os.time()
     local prevSnapshot = nil
-    local checkCount = 0
 
     while true do
-        wait(INTERVAL_MIN * 60)
-
-        checkCount = checkCount + 1
-        print("\n[Check #" .. checkCount .. "] Reading latest inventory snapshot...")
-
-        local snap = latestSnapshot
+        local snap = captureSnapshot(updateInventory)
 
         if snap then
-            print("📦 Snapshot found with " .. countItems(snap) .. " item types")
-
             if prevSnapshot == nil then
-                print("📍 First snapshot - saving baseline")
                 prevSnapshot = snap
             else
                 local diff = diffSnapshots(prevSnapshot, snap)
                 local desc = buildDescription(diff, sessionStart)
-
-                if desc then
-                    print("🎯 Items gained! Sending to Discord...")
-                    sendToDiscord(desc)
-                else
-                    print("❌ No item changes detected")
-                end
-
+                if desc then sendToDiscord(desc) end
                 prevSnapshot = snap
             end
-        else
-            print("⚠️ No inventory snapshot received yet - will retry next interval")
         end
+
+        wait(INTERVAL_MIN * 60)
     end
 end
 
