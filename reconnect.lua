@@ -1,7 +1,7 @@
 local TeleportService = game:GetService("TeleportService")
-local REJOIN_INTERVAL = 18 -- seconds
-local TARGET_PLACE_ID = 77747658251236
-local WEBHOOK_URL = "https://discord.com/api/webhooks/1488987999734599731/Pm1qIleWT2Kut1Z6VBplCyfH_4HKIg58n9CPdkjbyIt50VMrLyYjyqUwzmp_ATsVXl-k"
+
+local REJOIN_INTERVAL = 1860 -- seconds
+local WEBHOOK_URL = "https://discord.com/api/webhooks/1491999512506531850/9Bg3zLKyTkIBB7xgJCTekFluozbvUfH4eHUoBtCIxsXL4jlsgI44HCa-Mb3HUr1iZCzt"
 local startTime = os.time()
 
 local function formatTime(seconds)
@@ -13,20 +13,21 @@ end
 
 local function sendWebhook()
     local timeOnServer = os.time() - startTime
+
     local data = {
         embeds = {{
-            title = "🔄 Auto-Teleport Triggered",
-            description = "The script is teleporting to the target place.",
+            title = "🔄 Auto-Rejoin Triggered",
+            description = "The script is rejoining the server.",
             color = 5814783,
             fields = {
-                { name = "Current Place ID", value = tostring(game.PlaceId), inline = true },
-                { name = "Target Place ID", value = tostring(TARGET_PLACE_ID), inline = true },
+                { name = "Place ID", value = tostring(game.PlaceId), inline = true },
                 { name = "Player", value = tostring(game.Players.LocalPlayer.Name), inline = true },
                 { name = "⏱️ Time on Server", value = formatTime(timeOnServer), inline = false }
             },
-            footer = { text = "Auto-Teleport System" }
+            footer = { text = "Auto-Rejoin System" }
         }}
     }
+
     local success, err = pcall(function()
         request({
             Url = WEBHOOK_URL,
@@ -35,18 +36,19 @@ local function sendWebhook()
             Body = game:GetService("HttpService"):JSONEncode(data)
         })
     end)
+
     if success then
-        print("[Auto-Teleport] Webhook sent!")
+        print("[Auto-Rejoin] Webhook sent!")
     else
-        warn("[Auto-Teleport] Webhook failed: " .. tostring(err))
+        warn("[Auto-Rejoin] Webhook failed: " .. tostring(err))
     end
 end
 
-print("[Auto-Teleport] Script started!")
+print("[Auto-Rejoin] Script started!")
 
 task.delay(REJOIN_INTERVAL, function()
-    print("[Auto-Teleport] Teleporting to place " .. TARGET_PLACE_ID .. "...")
+    print("[Auto-Rejoin] Rejoining server...")
     sendWebhook()
     task.wait(2)
-    TeleportService:Teleport(TARGET_PLACE_ID)
+    TeleportService:Teleport(game.PlaceId)
 end)
